@@ -69,12 +69,11 @@ env_mappings:
   APP_NAME: APP_NAME
   DATABASE_URL: STAGE_DATABASE_URL
   UPLOAD_DIR: UPLOAD_DIR
-  CORS_ORIGINS: STAGE_DATABASE_URL
   OIDC_ISSUER: STAGE_OIDC_ISSUER
   OIDC_AUDIENCE: OIDC_AUDIENCE
   OIDC_CLIENT_ID: STAGE_OIDC_CLIENT_ID
   OIDC_CLIENT_SECRET: STAGE_OIDC_CLIENT_SECRET
-  OIDC_SCOPE: OIDC_SCOPE
+  OIDC_SCOPES: OIDC_SCOPES
   AUTH_DISABLED: AUTH_DISABLED
 
 # Deployment rules for staging environment
@@ -86,6 +85,12 @@ deploy_rules:
     branches:
       include:
         - main
+    registry_package: true
+
+workflow_checks:
+  require:
+    - "Sync Secrets to Deployment Bot"
+    - "Publish Containers to GHCR"
 
 # Alternative: Require manual approval via label
 # deploy_rules:
