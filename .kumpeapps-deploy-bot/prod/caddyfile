@@ -1,0 +1,15 @@
+homelogs.kumpe.app {
+  import ssl_defaults
+
+  handle /api* {
+    reverse_proxy {{nebula.ip}}:9000 {
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+
+  handle {
+    reverse_proxy {{nebula.ip}}:9080
+  }
+}

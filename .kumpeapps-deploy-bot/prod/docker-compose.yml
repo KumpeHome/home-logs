@@ -1,0 +1,52 @@
+# Production stack for kumpeapps-deploy-bot.
+# Images: ghcr.io/kumpehome/home-logs/{frontend,backend}:latest-stable
+# Ports differ from stage — both envs share vm_hostname kumpehome-logs.
+
+services:
+  backend:
+    image: ghcr.io/kumpehome/home-logs/backend:latest-stable
+    restart: unless-stopped
+    ports:
+      - "9000:8000"
+    environment:
+      APP_NAME: ${APP_NAME:-Home Logs}
+      DATABASE_URL: ${DATABASE_URL}
+      UPLOAD_DIR: /data/uploads
+      CORS_ORIGINS: https://homelogs.kumpe.app
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE}
+      OIDC_JWKS_URL: ${OIDC_JWKS_URL:-}
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
+      OIDC_SCOPES: ${OIDC_SCOPES:-openid profile email}
+      OIDC_M2M_CLIENT_ID: ${OIDC_M2M_CLIENT_ID:-}
+      OIDC_M2M_CLIENT_SECRET: ${OIDC_M2M_CLIENT_SECRET:-}
+      OIDC_MANAGEMENT_API: ${OIDC_MANAGEMENT_API:-}
+      AUTH_DISABLED: "false"
+    volumes:
+      - uploads_data:/data/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  frontend:
+    image: ghcr.io/kumpehome/home-logs/frontend:latest-stable
+    restart: unless-stopped
+    ports:
+      - "9080:80"
+    environment:
+      API_URL: http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  uploads_data:
