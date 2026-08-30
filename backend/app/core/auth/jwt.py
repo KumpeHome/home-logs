@@ -3,6 +3,7 @@ from __future__ import annotations
 import jwt
 from jwt import PyJWKClient
 
+from app.core.auth.oidc_urls import oidc_issuer_aliases, oidc_jwks_url
 from app.core.auth.user import AuthUser, auth_user_from_claims
 from app.core.config import Settings
 
@@ -12,13 +13,14 @@ class InvalidTokenError(Exception):
 
 
 def decode_access_token(token: str, key, issuer: str, audience: str) -> dict:
+    issuers = oidc_issuer_aliases(issuer)
     try:
         return jwt.decode(
             token,
             key,
             algorithms=["RS256", "ES256"],
             audience=audience,
-            issuer=issuer,
+            issuer=issuers,
             options={"require": ["sub", "exp"]},
         )
     except jwt.InvalidAudienceError as aud_exc:
@@ -27,7 +29,7 @@ def decode_access_token(token: str, key, issuer: str, audience: str) -> dict:
                 token,
                 key,
                 algorithms=["RS256", "ES256"],
-                issuer=issuer,
+                issuer=issuers,
                 options={"require": ["sub", "exp"], "verify_aud": False},
             )
         except jwt.PyJWTError as exc:
@@ -42,9 +44,7 @@ def decode_access_token(token: str, key, issuer: str, audience: str) -> dict:
 
 class JwksTokenValidator:
     def __init__(self, settings: Settings) -> None:
-        jwks_url = settings.oidc_jwks_url or (
-            settings.oidc_issuer.rstrip("/") + "/oidc/jwks"
-        )
+        jwks_url = settings.oidc_jwks_url or oidc_jwks_url(settings.oidc_issuer)
         self._issuer = settings.oidc_issuer
         self._audience = settings.oidc_audience
         self._client = PyJWKClient(jwks_url)

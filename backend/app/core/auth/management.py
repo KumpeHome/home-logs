@@ -4,6 +4,7 @@ from typing import Protocol
 
 import httpx
 
+from app.core.auth.oidc_urls import oidc_token_url
 from app.core.config import Settings
 
 
@@ -53,9 +54,8 @@ class LogtoCompatibleDirectory:
         return {"status": "invited", "email": email, "idp": response.json()}
 
     def _m2m_token(self) -> str:
-        issuer = self._settings.oidc_issuer.rstrip("/")
         response = httpx.post(
-            f"{issuer}/oidc/token",
+            oidc_token_url(self._settings.oidc_issuer),
             data={
                 "grant_type": "client_credentials",
                 "client_id": self._settings.oidc_m2m_client_id,

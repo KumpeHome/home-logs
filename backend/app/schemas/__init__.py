@@ -324,3 +324,9 @@ class PermissionGrant(BaseModel):
 
 class PermissionReplace(BaseModel):
     grants: list[PermissionGrant] = Field(default_factory=list)
+
+
+class OidcTokenExchange(BaseModel):
+    code: str = Field(min_length=1)
+    code_verifier: str = Field(min_length=1)
+    redirect_uri: str = Field(min_length=1)

@@ -150,33 +150,23 @@ export class AuthService {
       await this.router.navigateByUrl('/login');
       return;
     }
-    const oidc = resolveOidcConfig(bakedOidc, runtimeOidcEnv());
-    this.oidc = oidc;
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: oidc.clientId,
-      code,
-      redirect_uri: `${window.location.origin}/callback`,
-      code_verifier: readStore('session', 'oidc.verifier') ?? '',
-      resource: oidc.audience,
-    });
-    const tokenUrl = `${oidc.issuer.replace(/\/$/, '')}/oidc/token`;
-    const response = await fetch(tokenUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    if (!response.ok) {
+    try {
+      const payload = await firstValueFrom(
+        this.http.post<{ access_token: string; scope?: string }>(`${environment.apiUrl}/auth/token`, {
+          code,
+          code_verifier: readStore('session', 'oidc.verifier') ?? '',
+          redirect_uri: `${window.location.origin}/callback`,
+        }),
+      );
+      this.setToken(payload.access_token);
+      if (payload.scope) {
+        parseHomelogsScopes(payload.scope);
+      }
+      await this.loadMe();
+      await this.router.navigateByUrl('/');
+    } catch {
       await this.router.navigateByUrl('/login');
-      return;
     }
-    const payload = (await response.json()) as { access_token: string; scope?: string };
-    this.setToken(payload.access_token);
-    if (payload.scope) {
-      parseHomelogsScopes(payload.scope);
-    }
-    await this.loadMe();
-    await this.router.navigateByUrl('/');
   }
 
   logout(): void {

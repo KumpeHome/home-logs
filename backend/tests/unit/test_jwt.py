@@ -43,3 +43,33 @@ def test_static_validator_round_trip_rs256() -> None:
     assert "homelogs:logs:read" in user.scopes
     assert HOUSEHOLD_MANAGE not in user.scopes
     assert len(ALL_SCOPES) >= 10
+
+
+def test_static_validator_accepts_logto_oidc_issuer_suffix() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from app.core.auth.jwt import StaticKeyValidator
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = jwt.encode(
+        {
+            "sub": "sub-logto",
+            "email": "stage@example.com",
+            "aud": "https://homelogs.app/api",
+            "iss": "https://auth.stage.kumpe.app/oidc",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+            "scope": "homelogs:logs:read",
+        },
+        key,
+        algorithm="RS256",
+    )
+    validator = StaticKeyValidator(
+        key.public_key(),
+        issuer="https://auth.stage.kumpe.app",
+        audience="https://homelogs.app/api",
+    )
+    user = validator.validate(token)
+    assert user.subject == "sub-logto"

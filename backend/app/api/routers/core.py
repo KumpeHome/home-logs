@@ -6,12 +6,13 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, household_service, require_scopes
 from app.core.auth.scopes import ADMIN_AUDIT, HOUSEHOLD_MANAGE, HOUSEHOLD_READ
+from app.core.auth.token import exchange_authorization_code
 from app.core.auth.user import AuthUser
 from app.core.config import get_settings
 from app.db.session import get_db
 from app.models import AuditEvent, Household
 from app.permissions.service import PermissionService
-from app.schemas import HouseholdCreate, HouseholdUpdate
+from app.schemas import HouseholdCreate, HouseholdUpdate, OidcTokenExchange
 from app.services.households import HouseholdService
 
 router = APIRouter()
@@ -25,6 +26,16 @@ def health() -> dict:
         "name": "Home Logs",
         "auth_bypass": settings.auth_disabled,
     }
+
+
+@router.post("/auth/token")
+def exchange_oidc_token(data: OidcTokenExchange) -> dict:
+    return exchange_authorization_code(
+        get_settings(),
+        code=data.code,
+        code_verifier=data.code_verifier,
+        redirect_uri=data.redirect_uri,
+    )
 
 
 @router.get("/me")
