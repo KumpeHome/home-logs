@@ -1,0 +1,26 @@
+@if (log(); as entry) {
+  <a class="muted back" routerLink="/forms">← Submitted forms</a>
+  <header class="hl-card">
+    <h1>{{ entry.form_name }}</h1>
+    <p class="muted">
+      {{ entry.occurred_at | date:'short':timezone() }}
+      · {{ entry.subject_name || 'Household' }}
+      · {{ entry.status }}
+    </p>
+  </header>
+  <section class="hl-card">
+    <h2>Submitted answers</h2>
+    <dl class="facts">
+      @for (field of fields(); track field.key) {
+        <div>
+          <dt>{{ field.title }}</dt>
+          @if (field.imageUrl; as src) {
+            <dd><img class="drawn-initials" [src]="src" alt="Signed" /></dd>
+          } @else {
+            <dd>{{ field.value }}</dd>
+          }
+        </div>
+      }
+    </dl>
+  </section>
+}

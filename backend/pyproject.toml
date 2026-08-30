@@ -1,0 +1,57 @@
+[project]
+name = "home-logs-backend"
+version = "0.1.0"
+description = "Home Logs API — household and foster-care logging"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.52.4",
+    "pydantic==2.13.4",
+    "pydantic-settings==2.15.0",
+    "sqlalchemy==2.0.52",
+    "alembic==1.19.1",
+    "httpx==0.28.1",
+    "pymysql==1.2.0",
+    "cryptography==50.0.0",
+    "PyJWT==2.13.0",
+    "jsonschema==4.26.0",
+    "pypdf==6.16.1",
+    "reportlab==5.0.0",
+    "python-multipart==0.0.32",
+    "email-validator==2.3.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "black==26.5.1",
+    "ruff==0.16.3",
+]
+
+[build-system]
+requires = ["setuptools>=75"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+
+[tool.ruff]
+line-length = 88
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"app/api/routers/*.py" = ["B008"]
+"tests/**" = ["S101"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+pythonpath = ["."]

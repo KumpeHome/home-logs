@@ -1,0 +1,448 @@
+@if (profile(); as p) {
+  <a class="muted back" routerLink="/people">← People</a>
+  <header class="hero hl-card">
+    <hl-member-photo
+      [householdId]="api.hid()"
+      [memberId]="p.member_id"
+      [name]="displayName()"
+      [hasPhoto]="p.has_photo || member()?.has_photo"
+      size="lg"
+    />
+    <div>
+      <h1>{{ displayName() }}</h1>
+      <p class="muted">
+        {{ show(member()?.household_role) }}
+        · {{ show(member()?.status) }}
+        · login {{ show(member()?.login_status) }}
+      </p>
+      <label class="photo-upload">Change photo
+        <input type="file" accept="image/jpeg,image/png,image/gif,image/webp" (change)="onPhoto($event)" />
+      </label>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button type="button" [class.on]="tab() === 'overview'" (click)="tab.set('overview')">Overview</button>
+    <button type="button" [class.on]="tab() === 'health'" (click)="tab.set('health')">Health</button>
+    <button type="button" [class.on]="tab() === 'school'" (click)="tab.set('school')">School</button>
+    <button type="button" [class.on]="tab() === 'team'" (click)="tab.set('team')">Team</button>
+    <button type="button" [class.on]="tab() === 'records'" (click)="tab.set('records')">Records</button>
+    @if (canManagePermissions()) {
+      <button type="button" [class.on]="tab() === 'permissions'" (click)="tab.set('permissions')">Permissions</button>
+    }
+  </nav>
+
+  @if (tab() === 'overview') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>Overview</h2>
+        @if (!editing()) {
+          <button class="hl-btn secondary" type="button" data-test="edit-overview" (click)="startEdit()">Edit</button>
+        }
+      </div>
+      @if (!editing()) {
+        <dl class="facts">
+          <div><dt>Preferred name</dt><dd>{{ show(p.preferred_name) }}</dd></div>
+          <div><dt>Legal name</dt><dd>{{ p.first_name }} @if (p.middle_name) { {{ p.middle_name }} } {{ p.last_name }}</dd></div>
+          <div><dt>Date of birth</dt><dd>{{ show(p.date_of_birth) }}</dd></div>
+          <div><dt>Pronouns</dt><dd>{{ show(p.pronouns) }}</dd></div>
+          <div><dt>Sex</dt><dd>{{ show(p.sex) }}</dd></div>
+          <div><dt>Gender</dt><dd>{{ show(p.gender) }}</dd></div>
+          <div><dt>Email</dt><dd>{{ show(member()?.email) }}</dd></div>
+          <div><dt>Role</dt><dd>{{ show(member()?.household_role) }}</dd></div>
+          <div><dt>Medicaid</dt><dd>{{ show(p.medicaid_id) }}</dd></div>
+          <div><dt>Insurance</dt><dd>{{ show(p.insurance_provider) }}</dd></div>
+          <div><dt>Policy</dt><dd>{{ show(p.insurance_policy) }}</dd></div>
+          <div><dt>Group</dt><dd>{{ show(p.insurance_group) }}</dd></div>
+          <div><dt>Placement start</dt><dd>{{ show(p.placement_start) }}</dd></div>
+          <div><dt>Placement end</dt><dd>{{ show(p.placement_end) }}</dd></div>
+          <div><dt>Shirt</dt><dd>{{ show(p.clothing_shirt) }}</dd></div>
+          <div><dt>Pants</dt><dd>{{ show(p.clothing_pants) }}</dd></div>
+          <div><dt>Shoes</dt><dd>{{ show(p.clothing_shoes) }}</dd></div>
+          <div><dt>Notes</dt><dd>{{ show(p.notes) }}</dd></div>
+        </dl>
+      } @else {
+        <form class="hl-form" (ngSubmit)="save()">
+          <label>First <input [(ngModel)]="draft.first_name" name="first" /></label>
+          <label>Middle <input [(ngModel)]="draft.middle_name" name="middle" /></label>
+          <label>Last <input [(ngModel)]="draft.last_name" name="last" /></label>
+          <label>Preferred <input [(ngModel)]="draft.preferred_name" name="preferred" /></label>
+          <label>DOB <input type="date" [(ngModel)]="draft.date_of_birth" name="dob" /></label>
+          <label>Pronouns <input [(ngModel)]="draft.pronouns" name="pronouns" /></label>
+          <label>Sex <input [(ngModel)]="draft.sex" name="sex" /></label>
+          <label>Gender <input [(ngModel)]="draft.gender" name="gender" /></label>
+          <label>Role
+            <select [(ngModel)]="draft.household_role" name="role">
+              <option value="admin">Admin</option>
+              <option value="adult">Adult</option>
+              <option value="child">Child</option>
+              <option value="other">Other</option>
+            </select>
+          </label>
+          <label>Email <input [(ngModel)]="draft.email" name="email" /></label>
+          <label>Medicaid <input [(ngModel)]="draft.medicaid_id" name="medicaid" /></label>
+          <label>Insurance <input [(ngModel)]="draft.insurance_provider" name="ins" /></label>
+          <label>Policy <input [(ngModel)]="draft.insurance_policy" name="policy" /></label>
+          <label>Group <input [(ngModel)]="draft.insurance_group" name="group" /></label>
+          <label>Placement start <input type="date" [(ngModel)]="draft.placement_start" name="pstart" /></label>
+          <label>Placement end <input type="date" [(ngModel)]="draft.placement_end" name="pend" /></label>
+          <label>Shirt <input [(ngModel)]="draft.clothing_shirt" name="shirt" /></label>
+          <label>Pants <input [(ngModel)]="draft.clothing_pants" name="pants" /></label>
+          <label>Shoes <input [(ngModel)]="draft.clothing_shoes" name="shoes" /></label>
+          <label>Notes <textarea [(ngModel)]="draft.notes" name="notes"></textarea></label>
+          <div class="actions">
+            <button class="hl-btn" type="submit">Save</button>
+            <button class="hl-btn secondary" type="button" (click)="cancelEdit()">Cancel</button>
+          </div>
+        </form>
+      }
+    </section>
+  }
+
+  @if (tab() === 'health') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>Allergies</h2>
+        <button class="hl-btn secondary" type="button" data-test="add-allergies" (click)="toggleAdd('allergies')">Add allergy</button>
+      </div>
+      <ul>
+        @for (item of p.allergies; track item.id) {
+          <li>{{ item.allergen }} ({{ item.severity }}) {{ item.reaction }}
+            <button class="hl-btn secondary" type="button" (click)="remove('allergies', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'allergies') {
+        <form class="hl-form" (ngSubmit)="add('allergies', allergy)">
+          <label>Allergen <input [(ngModel)]="allergy.allergen" name="allergen" /></label>
+          <label>Severity
+            <select [(ngModel)]="allergy.severity" name="sev">
+              <option>mild</option><option>moderate</option><option>severe</option><option>life_threatening</option>
+            </select>
+          </label>
+          <label>Reaction <input [(ngModel)]="allergy.reaction" name="reaction" /></label>
+          <button class="hl-btn">Save allergy</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Household OTC</h2>
+      </div>
+      <ul>
+        @for (med of p.otc_medications ?? []; track med.id) {
+          <li>{{ med.name }} {{ med.dose }} {{ med.route }}
+            <span class="hl-pill pending">OTC</span>
+            <button class="hl-btn secondary" type="button" (click)="removeOtc(med.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None selected from the household cabinet.</li> }
+      </ul>
+      @if (availableOtc().length) {
+        <form class="hl-form" (ngSubmit)="assignOtc()">
+          <label>Select from household cabinet
+            <select [(ngModel)]="otcId" name="otc">
+              <option value="">Choose an OTC medication</option>
+              @for (item of availableOtc(); track item.id) {
+                <option [value]="item.id">{{ item.name }} {{ item.dose }}</option>
+              }
+            </select>
+          </label>
+          <button class="hl-btn" type="submit" data-test="assign-otc" [disabled]="!otcId">Assign OTC</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Medications</h2>
+        <button class="hl-btn secondary" type="button" data-test="add-medications" (click)="toggleAdd('medications')">Add medication</button>
+      </div>
+      <div class="tabs" data-test="med-filter">
+        <button type="button" [class.on]="medFilter() === 'active'" (click)="medFilter.set('active')">Active</button>
+        <button type="button" data-test="med-filter-inactive" [class.on]="medFilter() === 'inactive'" (click)="medFilter.set('inactive')">Inactive</button>
+        <button type="button" [class.on]="medFilter() === 'all'" (click)="medFilter.set('all')">All</button>
+      </div>
+      <ul class="med-list">
+        @for (medItem of filteredMeds(p); track medItem.id) {
+          <li class="med-card">
+            <div class="med-head">
+              <strong>{{ medItem.name }}</strong>
+              <span>{{ medItem.dose }} {{ medItem.route }} — {{ medItem.frequency }}</span>
+              @if (medItem.is_psychotropic) { <span class="hl-pill inactive">psychotropic</span> }
+              @if (medItem.is_prn) { <span class="hl-pill pending">PRN</span> }
+              @if (!medItem.active) { <span class="hl-pill inactive">inactive</span> }
+            </div>
+            <dl class="facts">
+              <div><dt>Schedule</dt><dd>{{ (medItem.schedule_times ?? []).join(', ') || '—' }}</dd></div>
+              <div><dt>Prescriber</dt><dd>{{ show(medItem.prescriber) }}</dd></div>
+              <div><dt>Diagnosis</dt><dd>{{ show(medItem.diagnosis) }}</dd></div>
+              <div><dt>Start</dt><dd>{{ show(medItem.start_date) }}</dd></div>
+              <div><dt>End</dt><dd>{{ show(medItem.end_date) }}</dd></div>
+              <div><dt>Hold reason</dt><dd>{{ show(medItem.hold_reason) }}</dd></div>
+              <div class="span"><dt>Instructions</dt><dd>{{ show(medItem.instructions) }}</dd></div>
+            </dl>
+            <div class="flag-row">
+              @for (code of medItem.flags ?? []; track code) {
+                <span class="hl-pill pending">{{ flagName(code) }}</span>
+              }
+            </div>
+            <div class="actions">
+              <button class="hl-btn secondary" type="button" data-test="edit-medication" (click)="startEditMed(medItem)">Edit</button>
+              <button class="hl-btn secondary" type="button" (click)="remove('medications', medItem.id)">Remove</button>
+            </div>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'medications') {
+        <form class="hl-form" [attr.data-test]="editingMedId() ? 'edit-medications-form' : 'add-medications-form'" (ngSubmit)="saveMedication()">
+          <label>Name <input [(ngModel)]="med.name" name="mname" /></label>
+          <div class="dose-row">
+            <label>Dose
+              <input type="number" min="0" step="any" [(ngModel)]="med.dose_amount" name="mdoseamt" data-test="med-dose-amount" />
+            </label>
+            <label>Unit
+              <select [(ngModel)]="med.dose_unit" name="mdoseunit" data-test="med-dose-unit">
+                @for (unit of doseUnits; track unit) {
+                  <option [value]="unit">{{ unit }}</option>
+                }
+              </select>
+            </label>
+          </div>
+          <label>Route <input [(ngModel)]="med.route" name="mroute" /></label>
+          <label>Frequency <input [(ngModel)]="med.frequency" name="mfreq" /></label>
+          <label>Schedule (comma times) <input [(ngModel)]="medTimes" name="mtimes" /></label>
+          <label>Prescriber <input [(ngModel)]="med.prescriber" name="mdoc" /></label>
+          <label>Diagnosis <input [(ngModel)]="med.diagnosis" name="mdx" /></label>
+          <label>Start date <input type="date" [(ngModel)]="med.start_date" name="mstart" data-test="med-start-date" /></label>
+          <label>End date <input type="date" [(ngModel)]="med.end_date" name="mend" data-test="med-end-date" /></label>
+          <label>Hold reason <input [(ngModel)]="med.hold_reason" name="mhold" /></label>
+          <label>Instructions <textarea [(ngModel)]="med.instructions" name="mins"></textarea></label>
+          <label class="inline"><input type="checkbox" [(ngModel)]="med.active" name="mactive" /> Active</label>
+          <label class="inline"><input type="checkbox" [(ngModel)]="med.is_psychotropic" name="mpsych" /> Psychotropic</label>
+          <label class="inline"><input type="checkbox" [(ngModel)]="med.is_prn" name="mprn" /> PRN</label>
+          <fieldset>
+            <legend>Awareness flags</legend>
+            @for (flag of medFlags; track flag.code) {
+              <label class="inline">
+                <input
+                  type="checkbox"
+                  [name]="'flag-' + flag.code"
+                  [checked]="hasFlag(flag.code)"
+                  (change)="toggleFlag(flag.code, $any($event.target).checked)"
+                />
+                {{ flag.label }}
+              </label>
+            }
+          </fieldset>
+          <button class="hl-btn">{{ editingMedId() ? 'Save changes' : 'Save medication' }}</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Diagnoses</h2>
+        <button class="hl-btn secondary" type="button" (click)="toggleAdd('diagnoses')">Add diagnosis</button>
+      </div>
+      <ul>
+        @for (item of p.diagnoses; track item.id) {
+          <li>{{ item.name }} {{ item.code }}
+            <button class="hl-btn secondary" type="button" (click)="remove('diagnoses', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'diagnoses') {
+        <form class="hl-form" (ngSubmit)="add('diagnoses', diagnosis)">
+          <label>Diagnosis <input [(ngModel)]="diagnosis.name" name="dname" /></label>
+          <label>Code <input [(ngModel)]="diagnosis.code" name="dcode" /></label>
+          <button class="hl-btn">Save diagnosis</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Disabilities</h2>
+        <button class="hl-btn secondary" type="button" (click)="toggleAdd('disabilities')">Add disability</button>
+      </div>
+      <ul>
+        @for (item of p.disabilities; track item.id) {
+          <li>{{ item.name }} — {{ item.accommodations }}
+            <button class="hl-btn secondary" type="button" (click)="remove('disabilities', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'disabilities') {
+        <form class="hl-form" (ngSubmit)="add('disabilities', disability)">
+          <label>Disability <input [(ngModel)]="disability.name" name="disname" /></label>
+          <label>Accommodations <input [(ngModel)]="disability.accommodations" name="acc" /></label>
+          <button class="hl-btn">Save disability</button>
+        </form>
+      }
+    </section>
+  }
+
+  @if (tab() === 'school') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>School</h2>
+        <a class="hl-btn secondary" routerLink="/school">Add enrollment</a>
+      </div>
+      <dl class="facts">
+        <div><dt>School</dt><dd>{{ show(p.school_name) }}</dd></div>
+        <div><dt>Grade</dt><dd>{{ show(p.school_grade) }}</dd></div>
+        <div><dt>Teacher</dt><dd>{{ show(p.teacher) }}</dd></div>
+        <div><dt>Counselor</dt><dd>{{ show(p.counselor) }}</dd></div>
+      </dl>
+      @for (row of enrollments(); track row.id) {
+        <h3>{{ row.school_name }} — {{ row.school_year }} (grade {{ row.grade_level }})</h3>
+        <p class="muted">IEP {{ row.iep ? 'yes' : 'no' }} · 504 {{ row.plan_504 ? 'yes' : 'no' }}</p>
+      } @empty {
+        <p class="muted">No enrollments yet.</p>
+      }
+    </section>
+  }
+
+  @if (tab() === 'team') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>Clinicians</h2>
+        <button class="hl-btn secondary" type="button" (click)="toggleAdd('clinicians')">Add clinician</button>
+      </div>
+      <ul>
+        @for (item of p.clinicians; track item.id) {
+          <li>{{ item.role }}: {{ item.name }} {{ item.phone }}
+            <button class="hl-btn secondary" type="button" (click)="remove('clinicians', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'clinicians') {
+        <form class="hl-form" (ngSubmit)="add('clinicians', clinician)">
+          <label>Role
+            <select [(ngModel)]="clinician.role" name="crole">
+              <option>pcp</option><option>dentist</option><option>therapist</option><option>psychiatrist</option><option>specialist</option>
+            </select>
+          </label>
+          <label>Name <input [(ngModel)]="clinician.name" name="cname" /></label>
+          <label>Clinic <input [(ngModel)]="clinician.clinic" name="cclinic" /></label>
+          <label>Phone <input [(ngModel)]="clinician.phone" name="cphone" /></label>
+          <button class="hl-btn">Save clinician</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Professional contacts</h2>
+        <button class="hl-btn secondary" type="button" (click)="toggleAdd('professional_contacts')">Add professional</button>
+      </div>
+      <ul>
+        @for (item of p.professional_contacts; track item.id) {
+          <li>{{ item.role }}: {{ item.name }} ({{ item.agency }})
+            <button class="hl-btn secondary" type="button" (click)="remove('professional_contacts', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'professional_contacts') {
+        <form class="hl-form" (ngSubmit)="add('professional_contacts', pro)">
+          <label>Role
+            <select [(ngModel)]="pro.role" name="prole">
+              <option>case_worker</option><option>adoption_specialist</option><option>gal</option><option>casa</option><option>attorney</option>
+            </select>
+          </label>
+          <label>Name <input [(ngModel)]="pro.name" name="pname" /></label>
+          <label>Agency <input [(ngModel)]="pro.agency" name="pagency" /></label>
+          <label>Phone <input [(ngModel)]="pro.phone" name="pphone" /></label>
+          <button class="hl-btn">Save professional</button>
+        </form>
+      }
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Emergency contacts</h2>
+        <button class="hl-btn secondary" type="button" (click)="toggleAdd('emergency_contacts')">Add emergency contact</button>
+      </div>
+      <ul>
+        @for (item of p.emergency_contacts; track item.id) {
+          <li>{{ item.name }} {{ item.relationship }} {{ item.phone }}
+            <button class="hl-btn secondary" type="button" (click)="remove('emergency_contacts', item.id)">Remove</button>
+          </li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+      @if (adding() === 'emergency_contacts') {
+        <form class="hl-form" (ngSubmit)="add('emergency_contacts', emergency)">
+          <label>Name <input [(ngModel)]="emergency.name" name="ename" /></label>
+          <label>Relationship <input [(ngModel)]="emergency.relationship" name="erel" /></label>
+          <label>Phone <input [(ngModel)]="emergency.phone" name="ephone" /></label>
+          <button class="hl-btn">Save emergency contact</button>
+        </form>
+      }
+    </section>
+  }
+
+  @if (tab() === 'records') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>Logs</h2>
+        <a class="hl-btn secondary" routerLink="/logs">Add log</a>
+      </div>
+      <table>
+        <tr><th>When</th><th>Form</th><th>Status</th><th></th></tr>
+        @for (log of logs(); track log.id) {
+          <tr>
+            <td>{{ log.occurred_at | date:'short':timezone() }}</td>
+            <td>{{ log.form_name }}</td>
+            <td>{{ log.status }}</td>
+            <td><a class="hl-btn secondary" [routerLink]="['/forms', log.id]">View</a></td>
+          </tr>
+        } @empty {
+          <tr><td colspan="4" class="muted">No logs yet.</td></tr>
+        }
+      </table>
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Documents</h2>
+        <a class="hl-btn secondary" routerLink="/documents">Add document</a>
+      </div>
+      <ul>
+        @for (doc of documents(); track doc.id) {
+          <li>{{ doc.title }} ({{ doc.category }})</li>
+        } @empty { <li class="muted">None uploaded.</li> }
+      </ul>
+    </section>
+    <section class="hl-card">
+      <div class="head">
+        <h2>Discipline</h2>
+        <a class="hl-btn secondary" routerLink="/discipline">Add record</a>
+      </div>
+      <ul>
+        @for (row of discipline(); track row.id) {
+          <li>{{ row.occurred_at | date:'short' }} — {{ row.behavior }}</li>
+        } @empty { <li class="muted">None recorded.</li> }
+      </ul>
+    </section>
+  }
+
+  @if (tab() === 'permissions') {
+    <section class="hl-card">
+      <div class="head">
+        <h2>Permissions</h2>
+        <button class="hl-btn" type="button" data-test="save-permissions" (click)="savePermissions()">Save</button>
+      </div>
+      <p class="muted">Choose what this login can view, add, edit, and export. Household admins always have full access.</p>
+      @for (resource of catalog(); track resource.code) {
+        <fieldset>
+          <legend>{{ resource.name }}</legend>
+          @for (action of resource.actions; track action) {
+            <label class="inline">
+              <input
+                type="checkbox"
+                [attr.data-test]="'perm-' + resource.code + '-' + action"
+                [checked]="hasGrant(resource.code, action)"
+                (change)="toggleGrant(resource.code, action, $event)"
+              />
+              {{ action }}
+            </label>
+          }
+        </fieldset>
+      }
+    </section>
+  }
+}

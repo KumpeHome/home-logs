@@ -1,0 +1,32 @@
+@if (auth.token() && auth.me()?.linked) {
+  <div class="shell">
+    <aside>
+      <div class="brand">
+        <img src="assets/brand/logo.svg" width="40" height="40" alt="" />
+        <div>
+          <strong>Home Logs</strong>
+          <small>{{ auth.me()?.email }}</small>
+        </div>
+      </div>
+      <label class="switcher">
+        Household
+        <select (change)="auth.selectHousehold($any($event.target).value)">
+          @for (home of auth.me()?.households ?? []; track home.id) {
+            <option [value]="home.id" [selected]="home.id === auth.householdId()">{{ home.name }}</option>
+          }
+        </select>
+      </label>
+      <nav>
+        @for (item of nav(); track item.path) {
+          <a [routerLink]="item.path" routerLinkActive="on" [routerLinkActiveOptions]="{exact: item.path === '/'}">{{ item.label }}</a>
+        }
+      </nav>
+      <button class="hl-btn secondary" (click)="auth.logout()">Sign out</button>
+    </aside>
+    <main>
+      <router-outlet />
+    </main>
+  </div>
+} @else {
+  <router-outlet />
+}

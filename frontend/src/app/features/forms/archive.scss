@@ -1,0 +1,38 @@
+:host {
+  display: grid;
+  gap: 1rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tabs button {
+  appearance: none;
+  border: 1px solid var(--hl-line);
+  background: #fff;
+  color: var(--hl-teal);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tabs button.on {
+  background: var(--hl-teal);
+  color: var(--hl-paper);
+  border-color: var(--hl-teal);
+}
+
+.head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+table {
+  width: 100%;
+}

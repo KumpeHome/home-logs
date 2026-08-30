@@ -1,0 +1,26 @@
+.venv/
+backend/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+.env
+uploads/
+backend/uploads/
+frontend/node_modules/
+frontend/dist/
+frontend/.angular/
+*.log
+.DS_Store
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# Added by ggshield
+.cache_ggshield
