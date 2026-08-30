@@ -1,9 +1,27 @@
+# Snippets: https://github.com/kumpeapps/caddy/blob/main/sites/_snippets.inc
 homelogs.stage.kumpe.app {
   import ssl_defaults
   import stage_env
+  import security_headers
+  import bot_protection
+  import exploit_protection
+  import log_common
+  import static_cache
+
+  handle /api/auth/token {
+    import rate_limit_login
+    reverse_proxy {{nebula.ip}}:8000 {
+      import reverse_proxy_defaults
+      header_up Host {host}
+      header_up X-Forwarded-Proto {scheme}
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
 
   handle /api* {
+    import rate_limit_api
     reverse_proxy {{nebula.ip}}:8000 {
+      import reverse_proxy_defaults
       header_up Host {host}
       header_up X-Forwarded-Proto {scheme}
       header_up X-Forwarded-For {remote_host}
@@ -11,6 +29,9 @@ homelogs.stage.kumpe.app {
   }
 
   handle {
-    reverse_proxy {{nebula.ip}}:8080
+    import rate_limit_general
+    reverse_proxy {{nebula.ip}}:8080 {
+      import reverse_proxy_defaults
+    }
   }
 }
