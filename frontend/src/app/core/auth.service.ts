@@ -156,6 +156,7 @@ export class AuthService {
           code,
           code_verifier: readStore('session', 'oidc.verifier') ?? '',
           redirect_uri: `${window.location.origin}/callback`,
+          resource: resolveOidcConfig(bakedOidc, runtimeOidcEnv()).audience,
         }),
       );
       this.setToken(payload.access_token);

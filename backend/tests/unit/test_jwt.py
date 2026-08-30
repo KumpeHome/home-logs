@@ -73,3 +73,66 @@ def test_static_validator_accepts_logto_oidc_issuer_suffix() -> None:
     )
     user = validator.validate(token)
     assert user.subject == "sub-logto"
+
+
+def test_static_validator_accepts_client_id_as_audience() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from app.core.auth.jwt import StaticKeyValidator
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = jwt.encode(
+        {
+            "sub": "sub-client-aud",
+            "email": "stage@example.com",
+            "aud": "home-logs-spa",
+            "iss": "https://auth.stage.kumpe.app/oidc",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+            "scope": "homelogs:household:manage",
+        },
+        key,
+        algorithm="RS256",
+    )
+    validator = StaticKeyValidator(
+        key.public_key(),
+        issuer="https://auth.stage.kumpe.app",
+        audience="https://homelogs.app/api",
+        extra_audiences=("home-logs-spa",),
+    )
+    user = validator.validate(token)
+    assert user.subject == "sub-client-aud"
+
+
+def test_audience_mismatch_names_token_and_expected() -> None:
+    from datetime import UTC, datetime, timedelta
+
+    import jwt
+    from cryptography.hazmat.primitives.asymmetric import rsa
+
+    from app.core.auth.jwt import InvalidTokenError, StaticKeyValidator
+
+    key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    token = jwt.encode(
+        {
+            "sub": "sub-bad-aud",
+            "aud": "https://wrong.example/api",
+            "iss": "https://auth.stage.kumpe.app/oidc",
+            "exp": datetime.now(UTC) + timedelta(minutes=5),
+        },
+        key,
+        algorithm="RS256",
+    )
+    validator = StaticKeyValidator(
+        key.public_key(),
+        issuer="https://auth.stage.kumpe.app",
+        audience="https://homelogs.app/api",
+    )
+    try:
+        validator.validate(token)
+        raise AssertionError("expected InvalidTokenError")
+    except InvalidTokenError as exc:
+        assert "https://wrong.example/api" in str(exc)
+        assert "https://homelogs.app/api" in str(exc)

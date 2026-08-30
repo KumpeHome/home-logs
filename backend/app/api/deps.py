@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Annotated
 
@@ -16,6 +17,7 @@ from app.db.session import get_db
 from app.services.households import HouseholdService
 from app.services.otc import OtcService
 
+logger = logging.getLogger(__name__)
 bearer = HTTPBearer(auto_error=False)
 
 
@@ -40,6 +42,7 @@ def get_current_user(
     try:
         return validator.validate(creds.credentials)
     except InvalidTokenError as exc:
+        logger.warning("JWT rejected: %s", exc)
         raise HTTPException(status_code=401, detail=str(exc)) from exc
 
 

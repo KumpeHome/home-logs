@@ -35,6 +35,7 @@ def exchange_oidc_token(data: OidcTokenExchange) -> dict:
         code=data.code,
         code_verifier=data.code_verifier,
         redirect_uri=data.redirect_uri,
+        resource=data.resource,
     )
 
 

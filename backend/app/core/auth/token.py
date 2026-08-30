@@ -13,6 +13,7 @@ def exchange_authorization_code(
     code: str,
     code_verifier: str,
     redirect_uri: str,
+    resource: str | None = None,
 ) -> dict:
     data = {
         "grant_type": "authorization_code",
@@ -20,7 +21,7 @@ def exchange_authorization_code(
         "code": code,
         "redirect_uri": redirect_uri,
         "code_verifier": code_verifier,
-        "resource": settings.oidc_audience,
+        "resource": resource or settings.oidc_audience,
     }
     if settings.oidc_client_secret:
         data["client_secret"] = settings.oidc_client_secret
