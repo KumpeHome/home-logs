@@ -23,6 +23,19 @@ def test_health_reports_auth_bypass_when_auth_disabled(monkeypatch) -> None:
     get_settings.cache_clear()
 
 
+def test_health_does_not_expose_oidc_settings(monkeypatch) -> None:
+    monkeypatch.setenv("AUTH_DISABLED", "false")
+    monkeypatch.setenv("OIDC_ISSUER", "https://auth.stage.kumpe.app")
+    get_settings.cache_clear()
+    with TestClient(create_app(init_db=False)) as client:
+        body = client.get("/api/health").json()
+        assert "oidc_issuer" not in body
+        assert "oidc_client_id" not in body
+        assert "oidc_audience" not in body
+        assert "oidc_scopes" not in body
+    get_settings.cache_clear()
+
+
 def test_oidc_required_when_auth_not_disabled(monkeypatch) -> None:
     monkeypatch.setenv("AUTH_DISABLED", "false")
     get_settings.cache_clear()

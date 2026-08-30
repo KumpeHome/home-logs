@@ -6,6 +6,8 @@ services:
       - "4200:80"
     depends_on:
       - backend
+    env_file:
+      - .env
     environment:
       API_URL: http://backend:8000
     healthcheck:

@@ -3,8 +3,16 @@ import { Injectable, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { firstValueFrom } from 'rxjs';
 import { environment } from './environment';
+import { type PublicOidcConfig, resolveOidcConfig, runtimeOidcEnv } from './oidc-config';
 import { parseHomelogsScopes, requestedOidcScopes } from './scopes';
 import { shouldBypassOidc } from './auth-bypass';
+
+const bakedOidc: PublicOidcConfig = {
+  issuer: environment.oidcIssuer,
+  clientId: environment.oidcClientId,
+  audience: environment.oidcAudience,
+  scopes: environment.oidcScopes,
+};
 
 export type PermissionGrant = { resource: string; action: string };
 
@@ -65,6 +73,7 @@ export class AuthService {
   readonly token = signal<string | null>(readStore('session', TOKEN_KEY));
   readonly householdId = signal<string | null>(readStore('local', HOUSEHOLD_KEY));
   readonly bypassAvailable = signal(false);
+  private oidc = bakedOidc;
 
   scopes(): string[] {
     return this.me()?.scopes ?? [];
@@ -119,15 +128,17 @@ export class AuthService {
     const state = this.randomString(24);
     writeStore('session', 'oidc.verifier', verifier);
     writeStore('session', 'oidc.state', state);
-    const url = new URL(`${environment.oidcIssuer.replace(/\/$/, '')}/oidc/auth`);
-    url.searchParams.set('client_id', environment.oidcClientId);
+    const oidc = resolveOidcConfig(bakedOidc, runtimeOidcEnv());
+    this.oidc = oidc;
+    const url = new URL(`${oidc.issuer.replace(/\/$/, '')}/oidc/auth`);
+    url.searchParams.set('client_id', oidc.clientId);
     url.searchParams.set('redirect_uri', `${window.location.origin}/callback`);
     url.searchParams.set('response_type', 'code');
-    url.searchParams.set('scope', requestedOidcScopes(environment.oidcScopes));
+    url.searchParams.set('scope', requestedOidcScopes(oidc.scopes));
     url.searchParams.set('code_challenge', challenge);
     url.searchParams.set('code_challenge_method', 'S256');
     url.searchParams.set('state', state);
-    url.searchParams.set('resource', environment.oidcAudience);
+    url.searchParams.set('resource', oidc.audience);
     window.location.assign(url.toString());
   }
 
@@ -139,15 +150,17 @@ export class AuthService {
       await this.router.navigateByUrl('/login');
       return;
     }
+    const oidc = resolveOidcConfig(bakedOidc, runtimeOidcEnv());
+    this.oidc = oidc;
     const body = new URLSearchParams({
       grant_type: 'authorization_code',
-      client_id: environment.oidcClientId,
+      client_id: oidc.clientId,
       code,
       redirect_uri: `${window.location.origin}/callback`,
       code_verifier: readStore('session', 'oidc.verifier') ?? '',
-      resource: environment.oidcAudience,
+      resource: oidc.audience,
     });
-    const tokenUrl = `${environment.oidcIssuer.replace(/\/$/, '')}/oidc/token`;
+    const tokenUrl = `${oidc.issuer.replace(/\/$/, '')}/oidc/token`;
     const response = await fetch(tokenUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
