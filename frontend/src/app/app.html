@@ -1,11 +1,30 @@
 @if (auth.token() && auth.me()?.linked) {
-  <div class="shell">
+  <div class="shell" [class.nav-open]="navOpen()">
+    <button
+      class="nav-toggle"
+      type="button"
+      data-test="open-nav"
+      [attr.aria-expanded]="navOpen()"
+      [attr.aria-label]="navOpen() ? 'Close navigation' : 'Open navigation'"
+      (click)="toggleNav()"
+    >
+      <span></span>
+      <span></span>
+      <span></span>
+    </button>
+    <div class="nav-backdrop" (click)="closeNav()"></div>
     <aside>
       <div class="brand">
-        <img src="assets/brand/logo.svg" width="40" height="40" alt="" />
+        <img
+          class="brand-logo"
+          data-test="brand-logo"
+          src="assets/brand/logo.webp"
+          width="72"
+          alt="Kumpe Home Logs"
+        />
         <div>
-          <strong>Home Logs</strong>
-          <small>{{ auth.me()?.email }}</small>
+          <strong>Kumpe Home Logs</strong>
+          <small>Maintain · Track · Care · Protect</small>
         </div>
       </div>
       <label class="switcher">
@@ -16,12 +35,26 @@
           }
         </select>
       </label>
+      @if (canAddRecord()) {
+        <a class="hl-btn add-record" routerLink="/logs" (click)="closeNav()">Add a record</a>
+      }
       <nav>
-        @for (item of nav(); track item.path) {
-          <a [routerLink]="item.path" routerLinkActive="on" [routerLinkActiveOptions]="{exact: item.path === '/'}">{{ item.label }}</a>
+        @for (group of navGroups(); track group.name) {
+          <p class="nav-group">{{ group.name }}</p>
+          @for (item of group.items; track item.path) {
+            <a
+              [routerLink]="item.path"
+              routerLinkActive="on"
+              [routerLinkActiveOptions]="{exact: item.path === '/'}"
+              (click)="closeNav()"
+            >{{ item.label }}</a>
+          }
         }
       </nav>
-      <button class="hl-btn secondary" (click)="auth.logout()">Sign out</button>
+      <div class="aside-foot">
+        <p class="user-chip">{{ auth.me()?.name || auth.me()?.email }}</p>
+        <button class="hl-btn ghost" (click)="auth.logout()">Sign out</button>
+      </div>
     </aside>
     <main>
       <router-outlet />

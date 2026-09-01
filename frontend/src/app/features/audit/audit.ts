@@ -6,7 +6,14 @@ import { ApiService } from '../../core/api.service';
   selector: 'hl-audit',
   imports: [DatePipe],
   template: `
-    <h1>Audit log</h1>
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Records</p>
+        <h1>Activity</h1>
+        <p class="lede">A quiet history of who changed what, when you need it.</p>
+      </div>
+    </header>
+    <div class="table-wrap">
     <table>
       <tr><th>When</th><th>Actor</th><th>Action</th><th>Summary</th></tr>
       @for (row of rows(); track row.id) {
@@ -18,6 +25,7 @@ import { ApiService } from '../../core/api.service';
         </tr>
       }
     </table>
+    </div>
   `,
 })
 export class AuditPage {

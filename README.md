@@ -47,6 +47,16 @@ The SPA always requests these RBAC scopes in addition to `OIDC_SCOPES` (`openid 
 SPA: public client, authorization code + PKCE, redirect `http://localhost:4200/callback`.  
 Backend: JWKS JWT validation. Optional Management API M2M credentials send login invites; members stay **pending** until first sign-in.
 
+Public brand logos (no auth) for the IdP application logo URI:
+
+- PNG: `https://<your-host>/api/brand/logo.png`
+- WebP: `https://<your-host>/api/brand/logo.webp`
+
+Stage: `https://homelogs.stage.kumpe.app/api/brand/logo.png`  
+Prod: `https://homelogs.kumpe.app/api/brand/logo.png`  
+Same files also answer at `/api/assets/brand/logo.png` and `/assets/brand/logo.png` (handy when pointing at the API port).  
+`GET /api/brand` lists both paths. The SPA also serves the same files at `/assets/brand/logo.webp` and `/assets/brand/logo.png`.
+
 ### Dev OIDC bypass
 
 Set in `.env` (never in production):

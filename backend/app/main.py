@@ -2,11 +2,12 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 import app.models  # noqa: F401
 from app.api.routers.core import router as core_router
 from app.api.routers.domain import logs_router, members_router, more_router
+from app.brand import brand_file
 from app.core.config import get_settings
 from app.core.errors import DomainError
 from app.db.schema import ensure_schema
@@ -47,6 +48,15 @@ def create_app(*, init_db: bool = True) -> FastAPI:
     application.include_router(members_router, prefix="/api")
     application.include_router(logs_router, prefix="/api")
     application.include_router(more_router, prefix="/api")
+
+    @application.api_route("/assets/brand/{filename}", methods=["GET", "HEAD"])
+    def spa_brand_asset(filename: str) -> FileResponse:
+        return brand_file(filename)
+
+    @application.api_route("/favicon.ico", methods=["GET", "HEAD"])
+    def favicon() -> FileResponse:
+        return brand_file("logo.png")
+
     return application
 
 

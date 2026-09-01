@@ -1,10 +1,12 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
+from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, household_service, require_scopes
+from app.brand import brand_file, brand_index
 from app.core.auth.scopes import ADMIN_AUDIT, HOUSEHOLD_MANAGE, HOUSEHOLD_READ
 from app.core.auth.token import exchange_authorization_code
 from app.core.auth.user import AuthUser
@@ -26,6 +28,21 @@ def health() -> dict:
         "name": "Home Logs",
         "auth_bypass": settings.auth_disabled,
     }
+
+
+@router.get("/brand")
+def list_brand_assets() -> dict[str, str]:
+    return brand_index()
+
+
+@router.api_route("/brand/{filename}", methods=["GET", "HEAD"])
+def get_brand_asset(filename: str) -> FileResponse:
+    return brand_file(filename)
+
+
+@router.api_route("/assets/brand/{filename}", methods=["GET", "HEAD"])
+def get_brand_asset_under_api_assets(filename: str) -> FileResponse:
+    return brand_file(filename)
 
 
 @router.post("/auth/token")
