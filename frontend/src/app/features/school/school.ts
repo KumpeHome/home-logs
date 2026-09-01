@@ -6,7 +6,13 @@ import { ApiService } from '../../core/api.service';
   selector: 'hl-school',
   imports: [FormsModule],
   template: `
-    <h1>School</h1>
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Care</p>
+        <h1>School</h1>
+        <p class="lede">Enrollments, grades, and report cards without the paperwork scramble.</p>
+      </div>
+    </header>
     <section class="hl-card">
       <h2>New enrollment</h2>
       <form class="hl-form" (ngSubmit)="enroll()">
@@ -20,8 +26,8 @@ import { ApiService } from '../../core/api.service';
         <label>School <input [(ngModel)]="draft.school_name" name="school" /></label>
         <label>Grade <input [(ngModel)]="draft.grade_level" name="grade" /></label>
         <label>Year <input [(ngModel)]="draft.school_year" name="year" /></label>
-        <label><input type="checkbox" [(ngModel)]="draft.iep" name="iep" /> IEP</label>
-        <label><input type="checkbox" [(ngModel)]="draft.plan_504" name="p504" /> 504</label>
+        <label class="inline"><input type="checkbox" [(ngModel)]="draft.iep" name="iep" /> IEP</label>
+        <label class="inline"><input type="checkbox" [(ngModel)]="draft.plan_504" name="p504" /> 504</label>
         <button class="hl-btn">Save enrollment</button>
       </form>
     </section>
@@ -52,6 +58,13 @@ import { ApiService } from '../../core/api.service';
             <li>{{ card.term }} — {{ card.filename }}</li>
           }
         </ul>
+      </section>
+    } @empty {
+      <section class="hl-card">
+        <div class="empty">
+          <strong>No school enrollments yet</strong>
+          <span>Add a school year when you're ready. Grades and report cards can follow.</span>
+        </div>
       </section>
     }
   `,

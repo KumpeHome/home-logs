@@ -81,7 +81,7 @@ export interface FormMember {
           }
         </label>
       }
-      <button class="hl-btn" type="button" (click)="emitSave()">Save</button>
+      <button class="hl-btn" type="button" (click)="emitSave()">Save record</button>
     </div>
   `,
 })

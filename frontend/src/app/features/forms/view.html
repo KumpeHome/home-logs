@@ -1,8 +1,9 @@
 @if (log(); as entry) {
   <a class="muted back" routerLink="/forms">← Submitted forms</a>
   <header class="hl-card">
+    <p class="eyebrow">Record</p>
     <h1>{{ entry.form_name }}</h1>
-    <p class="muted">
+    <p class="lede">
       {{ entry.occurred_at | date:'short':timezone() }}
       · {{ entry.subject_name || 'Household' }}
       · {{ entry.status }}

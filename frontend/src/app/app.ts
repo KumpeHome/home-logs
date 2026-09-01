@@ -1,6 +1,8 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 import { AuthService } from './core/auth.service';
+
+type NavItem = { path: string; label: string; resource: string; group: string };
 
 @Component({
   selector: 'app-root',
@@ -10,21 +12,42 @@ import { AuthService } from './core/auth.service';
 })
 export class App {
   readonly auth = inject(AuthService);
+  readonly navOpen = signal(false);
 
-  readonly allNav = [
-    { path: '/', label: 'Dashboard', resource: 'tab.dashboard' },
-    { path: '/people', label: 'People', resource: 'tab.people' },
-    { path: '/logs', label: 'Logs', resource: 'tab.logs' },
-    { path: '/forms', label: 'Forms', resource: 'tab.forms' },
-    { path: '/school', label: 'School', resource: 'tab.school' },
-    { path: '/discipline', label: 'Discipline', resource: 'tab.discipline' },
-    { path: '/documents', label: 'Documents', resource: 'tab.documents' },
-    { path: '/export', label: 'Export', resource: 'tab.export' },
-    { path: '/settings', label: 'Settings', resource: 'tab.settings' },
-    { path: '/audit', label: 'Audit', resource: 'tab.audit' },
+  readonly allNav: NavItem[] = [
+    { path: '/', label: 'Dashboard', resource: 'tab.dashboard', group: 'Home' },
+    { path: '/people', label: 'Members', resource: 'tab.people', group: 'Home' },
+    { path: '/logs', label: 'Logs', resource: 'tab.logs', group: 'Care' },
+    { path: '/school', label: 'School', resource: 'tab.school', group: 'Care' },
+    { path: '/discipline', label: 'Behavior', resource: 'tab.discipline', group: 'Care' },
+    { path: '/forms', label: 'Submitted', resource: 'tab.forms', group: 'Records' },
+    { path: '/documents', label: 'Documents', resource: 'tab.documents', group: 'Records' },
+    { path: '/export', label: 'Reports', resource: 'tab.export', group: 'Records' },
+    { path: '/audit', label: 'Activity', resource: 'tab.audit', group: 'Records' },
+    { path: '/settings', label: 'Settings', resource: 'tab.settings', group: 'Account' },
   ];
 
-  nav(): { path: string; label: string }[] {
-    return this.allNav.filter((item) => this.auth.can(item.resource, 'view'));
+  navGroups(): { name: string; items: { path: string; label: string }[] }[] {
+    const names = ['Home', 'Care', 'Records', 'Account'];
+    return names
+      .map((name) => ({
+        name,
+        items: this.allNav
+          .filter((item) => item.group === name && this.auth.can(item.resource, 'view'))
+          .map(({ path, label }) => ({ path, label })),
+      }))
+      .filter((group) => group.items.length);
+  }
+
+  canAddRecord(): boolean {
+    return this.auth.can('tab.logs', 'view');
+  }
+
+  closeNav(): void {
+    this.navOpen.set(false);
+  }
+
+  toggleNav(): void {
+    this.navOpen.update((open) => !open);
   }
 }

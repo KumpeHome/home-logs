@@ -12,25 +12,31 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
   selector: 'hl-logs',
   imports: [DatePipe, FormsModule, FormRenderer, InitialsPad, RouterLink],
   template: `
-    <h1>Logs</h1>
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Care</p>
+        <h1>Add a record</h1>
+        <p class="lede">A few calm notes now make the rest of the day easier to look back on.</p>
+      </div>
+    </header>
     <div class="hl-card">
       <form class="hl-form" (ngSubmit)="start()">
-        <label>Form
+        <label>What happened
           <select [(ngModel)]="formCode" name="form">
             @for (form of forms(); track form.code) {
               <option [value]="form.code">{{ form.name }}</option>
             }
           </select>
         </label>
-        <label>Member
+        <label>Who is this for
           <select [(ngModel)]="memberId" name="member">
-            <option value="">Household / not member-specific</option>
+            <option value="">Whole household</option>
             @for (member of members(); track member.id) {
               <option [value]="member.id">{{ member.legal_name }}</option>
             }
           </select>
         </label>
-        <button class="hl-btn" type="submit">Open form</button>
+        <button class="hl-btn" type="submit">Continue</button>
       </form>
     </div>
     @if (selected(); as form) {
@@ -88,23 +94,32 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
     }
     <section class="hl-card">
       <div class="head">
-        <h2>History</h2>
+        <h2>Recent history</h2>
         <a class="hl-btn secondary" routerLink="/forms">View submitted</a>
         <a class="hl-btn secondary" [href]="exportUrl('pdf')">Export PDF</a>
         <a class="hl-btn secondary" [href]="exportUrl('csv')">Export CSV</a>
       </div>
-      <table>
-        <tr><th>When</th><th>Form</th><th>Who</th><th>Status</th><th></th></tr>
-        @for (log of logs(); track log.id) {
-          <tr>
-            <td>{{ log.occurred_at | date:'short':timezone() }}</td>
-            <td>{{ log.form_name }}</td>
-            <td>{{ log.subject_name || 'Household' }}</td>
-            <td>{{ log.status }}</td>
-            <td><a class="hl-btn secondary" [routerLink]="['/forms', log.id]">View</a></td>
-          </tr>
-        }
-      </table>
+      @if (logs().length) {
+        <div class="table-wrap">
+          <table>
+            <tr><th>When</th><th>Form</th><th>Who</th><th>Status</th><th></th></tr>
+            @for (log of logs(); track log.id) {
+              <tr>
+                <td>{{ log.occurred_at | date:'short':timezone() }}</td>
+                <td>{{ log.form_name }}</td>
+                <td>{{ log.subject_name || 'Household' }}</td>
+                <td><span class="hl-pill pending">{{ log.status }}</span></td>
+                <td><a class="hl-btn secondary" [routerLink]="['/forms', log.id]">View</a></td>
+              </tr>
+            }
+          </table>
+        </div>
+      } @else {
+        <div class="empty">
+          <strong>No records yet</strong>
+          <span>When you save a form, it will show up here.</span>
+        </div>
+      }
     </section>
   `,
 })

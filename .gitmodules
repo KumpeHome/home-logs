@@ -1,3 +1,6 @@
 [submodule ".ai-agent-skills"]
 	path = .ai-agent-skills
 	url = https://github.com/kumpeapps/ai-agent-skills.git
+[submodule "logo"]
+	path = logo
+	url = git@github.com:kumpeapps/logos.git

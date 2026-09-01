@@ -8,7 +8,13 @@ import { composeDose, DOSE_UNITS } from '../../shared/dose';
   selector: 'hl-settings',
   imports: [FormsModule],
   template: `
-    <h1>Household settings</h1>
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Account</p>
+        <h1>Household settings</h1>
+        <p class="lede">A few details about this home, plus the shared medicine cabinet.</p>
+      </div>
+    </header>
     @if (household(); as h) {
       <form class="hl-card hl-form" (ngSubmit)="save()">
         <label>Name <input [(ngModel)]="h.name" name="name" /></label>
@@ -31,7 +37,7 @@ import { composeDose, DOSE_UNITS } from '../../shared/dose';
           <label>License # / Provider ID <input [(ngModel)]="h.license_number" name="lic" /></label>
           <label>Capacity <input type="number" [(ngModel)]="h.capacity" name="cap" /></label>
         }
-        <button class="hl-btn">Save</button>
+        <button class="hl-btn">Save changes</button>
       </form>
     }
     <section class="hl-card">
@@ -66,8 +72,8 @@ import { composeDose, DOSE_UNITS } from '../../shared/dose';
       </form>
     </section>
     <section class="hl-card">
-      <h2>Your HomeLogs scopes</h2>
-      <p class="muted">Synced from KumpeCloud Auth on each login. Prefix <code>homelogs:</code></p>
+        <h2>Your access</h2>
+        <p class="muted">Synced from KumpeCloud Auth on each login.</p>
       <ul>
         @for (scope of auth.scopes(); track scope) { <li>{{ scope }}</li> }
       </ul>

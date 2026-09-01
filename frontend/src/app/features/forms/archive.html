@@ -1,5 +1,11 @@
-<h1>Submitted forms</h1>
-<p class="muted">Browse each form type and open a submitted record to see what was entered.</p>
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Records</p>
+    <h1>Submitted forms</h1>
+    <p class="lede">Browse each form type and open a submitted record to see what was entered.</p>
+  </div>
+  <a class="hl-btn" routerLink="/logs">Add a record</a>
+</header>
 
 <nav class="tabs" data-test="form-tabs">
   @for (form of forms(); track form.code) {
@@ -10,19 +16,25 @@
 <section class="hl-card">
   <div class="head">
     <h2>{{ selectedForm()?.name || 'Forms' }}</h2>
-    <a class="hl-btn secondary" routerLink="/logs">Fill out form</a>
   </div>
-  <table>
-    <tr><th>When</th><th>Who</th><th>Status</th><th></th></tr>
-    @for (log of logs(); track log.id) {
-      <tr>
-        <td>{{ log.occurred_at | date:'short':timezone() }}</td>
-        <td>{{ log.subject_name || 'Household' }}</td>
-        <td>{{ log.status }}</td>
-        <td><a class="hl-btn secondary" data-test="view-form" [routerLink]="['/forms', log.id]">View form</a></td>
-      </tr>
-    } @empty {
-      <tr><td colspan="4" class="muted">No submissions yet for this form.</td></tr>
-    }
-  </table>
+  @if (logs().length) {
+    <div class="table-wrap">
+      <table>
+        <tr><th>When</th><th>Who</th><th>Status</th><th></th></tr>
+        @for (log of logs(); track log.id) {
+          <tr>
+            <td>{{ log.occurred_at | date:'short':timezone() }}</td>
+            <td>{{ log.subject_name || 'Household' }}</td>
+            <td><span class="hl-pill pending">{{ log.status }}</span></td>
+            <td><a class="hl-btn secondary" data-test="view-form" [routerLink]="['/forms', log.id]">View form</a></td>
+          </tr>
+        }
+      </table>
+    </div>
+  } @else {
+    <div class="empty">
+      <strong>No submissions yet for this form.</strong>
+      <span>When someone fills it out, the record will land here.</span>
+    </div>
+  }
 </section>

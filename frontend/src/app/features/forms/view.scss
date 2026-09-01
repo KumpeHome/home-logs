@@ -23,7 +23,7 @@ dt {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--hl-muted);
+  color: var(--kh-text-muted);
 }
 
 dd {
@@ -36,7 +36,7 @@ dd {
   width: 10rem;
   height: 3.75rem;
   object-fit: contain;
-  border: 1px solid var(--hl-line);
+  border: 1px solid var(--kh-border);
   border-radius: 10px;
-  background: #fff;
+  background: var(--kh-surface-2);
 }

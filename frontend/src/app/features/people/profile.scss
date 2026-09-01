@@ -17,7 +17,7 @@
   display: grid;
   gap: 0.3rem;
   font-size: 0.85rem;
-  color: var(--hl-muted);
+  color: var(--kh-text-muted);
   margin-top: 0.5rem;
 }
 
@@ -28,7 +28,7 @@
 }
 
 fieldset {
-  border: 1px solid var(--hl-line);
+  border: 1px solid var(--kh-border);
   border-radius: 12px;
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
@@ -45,9 +45,9 @@ fieldset .inline {
 
 .tabs button {
   appearance: none;
-  border: 1px solid var(--hl-line);
-  background: #fff;
-  color: var(--hl-teal);
+  border: 1px solid var(--kh-border);
+  background: var(--kh-surface-2);
+  color: var(--kh-text-secondary);
   border-radius: 999px;
   padding: 0.4rem 0.9rem;
   font-weight: 600;
@@ -55,9 +55,9 @@ fieldset .inline {
 }
 
 .tabs button.on {
-  background: var(--hl-teal);
-  color: var(--hl-paper);
-  border-color: var(--hl-teal);
+  background: rgba(16, 217, 232, 0.14);
+  color: var(--kh-primary);
+  border-color: var(--kh-primary);
 }
 
 .head {
@@ -83,7 +83,7 @@ dt {
   font-size: 0.75rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  color: var(--hl-muted);
+  color: var(--kh-text-muted);
 }
 
 dd {
@@ -107,7 +107,7 @@ li {
   gap: 0.4rem;
   align-items: center;
   padding: 0.45rem 0;
-  border-bottom: 1px solid var(--hl-line);
+  border-bottom: 1px solid var(--kh-border);
 }
 
 .med-list {
@@ -140,7 +140,7 @@ li {
 }
 
 fieldset {
-  border: 1px solid var(--hl-line);
+  border: 1px solid var(--kh-border);
   border-radius: 0.75rem;
   padding: 0.75rem;
   display: grid;

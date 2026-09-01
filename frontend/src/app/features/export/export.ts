@@ -11,9 +11,14 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
   selector: 'hl-export',
   imports: [FormsModule],
   template: `
-    <h1>Export forms</h1>
+    <header class="page-head">
+      <div>
+        <p class="eyebrow">Records</p>
+        <h1>Reports</h1>
+        <p class="lede">{{ helpText() }}</p>
+      </div>
+    </header>
     <section class="hl-card">
-      <p class="muted">{{ helpText() }}</p>
       @if (error()) {
         <p class="error">{{ error() }}</p>
       }
