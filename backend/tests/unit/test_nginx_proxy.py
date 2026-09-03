@@ -1,6 +1,8 @@
 import os
+import re
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 ROOT = Path(__file__).resolve().parents[3]
 
@@ -31,7 +33,12 @@ def test_frontend_entrypoint_writes_oidc_from_env(tmp_path) -> None:
     js = (tmp_path / "env.js").read_text()
     dockerfile = (ROOT / "frontend" / "Dockerfile").read_text()
     index_html = (ROOT / "frontend" / "src" / "index.html").read_text()
-    assert "https://auth.stage.kumpe.app" in js
+    match = re.search(r'OIDC_ISSUER:\s*"([^"]*)"', js)
+    assert match is not None
+    issuer = urlparse(match.group(1))
+    assert issuer.scheme == "https"
+    assert issuer.hostname == "auth.stage.kumpe.app"
+    assert issuer.path in ("", "/")
     assert "home-logs-spa" in js
     assert "window.__ENV__" in js
     assert "docker-entrypoint.sh" in dockerfile
@@ -47,3 +54,9 @@ def test_backend_image_makes_upload_volume_writable() -> None:
     assert "chown" in entrypoint
     assert "UPLOAD_DIR" in entrypoint
     assert "runuser -u appuser" in entrypoint
+
+
+def test_sync_secrets_workflow_declares_least_privilege_permissions() -> None:
+    workflow = (ROOT / ".github" / "workflows" / "sync-secrets.yml").read_text()
+    assert re.search(r"(?m)^permissions:\s*$", workflow)
+    assert re.search(r"(?m)^\s+contents:\s+read\s*$", workflow)
