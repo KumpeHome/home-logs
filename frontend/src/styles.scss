@@ -561,6 +561,10 @@ fieldset legend {
 }
 
 @media (max-width: 800px) {
+  body:has(.shell.nav-open) {
+    overflow: hidden;
+  }
+
   h1 {
     font-size: 1.5rem;
   }

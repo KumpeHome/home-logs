@@ -13,7 +13,7 @@
       <span></span>
     </button>
     <div class="nav-backdrop" (click)="closeNav()"></div>
-    <aside>
+    <aside data-test="app-sidebar">
       <div class="brand">
         <img
           class="brand-logo"
@@ -38,7 +38,7 @@
       @if (canAddRecord()) {
         <a class="hl-btn add-record" routerLink="/logs" (click)="closeNav()">Add a record</a>
       }
-      <nav>
+      <nav data-test="app-nav">
         @for (group of navGroups(); track group.name) {
           <p class="nav-group">{{ group.name }}</p>
           @for (item of group.items; track item.path) {

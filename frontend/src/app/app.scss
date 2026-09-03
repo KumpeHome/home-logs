@@ -2,6 +2,7 @@
   display: grid;
   grid-template-columns: 260px 1fr;
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .nav-toggle,
@@ -17,7 +18,23 @@ aside {
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  min-height: 100vh;
+  align-self: start;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+  max-height: 100vh;
+  max-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.brand,
+.switcher,
+.add-record,
+.aside-foot {
+  flex-shrink: 0;
 }
 
 .brand {
@@ -68,9 +85,15 @@ aside {
 }
 
 nav {
-  display: grid;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
   gap: 0.15rem;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .nav-group {
@@ -81,6 +104,7 @@ nav {
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--kh-text-muted);
+  flex-shrink: 0;
 }
 
 nav a {
@@ -93,6 +117,7 @@ nav a {
   align-items: center;
   border-left: 3px solid transparent;
   font-weight: 600;
+  flex-shrink: 0;
 }
 
 nav a.on {
@@ -169,10 +194,13 @@ main {
     position: fixed;
     inset: 0 auto 0 0;
     width: min(280px, 88vw);
+    height: 100%;
+    max-height: 100dvh;
     z-index: 30;
     transform: translateX(-105%);
     transition: transform var(--transition-normal);
     box-shadow: var(--shadow-lg);
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
   }
 
   .shell.nav-open aside {
