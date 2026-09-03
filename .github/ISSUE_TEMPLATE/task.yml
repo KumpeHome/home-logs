@@ -1,0 +1,13 @@
+name: Task
+description: Track work that is not a bug or feature.
+title: "[task] "
+labels: ["task"]
+type: Task
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What needs to be done?
+    validations:
+      required: true

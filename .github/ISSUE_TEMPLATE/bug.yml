@@ -1,0 +1,13 @@
+name: Bug
+description: Report a problem.
+title: "[bug] "
+labels: ["bug"]
+type: Bug
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What went wrong, and what did you expect instead?
+    validations:
+      required: true
