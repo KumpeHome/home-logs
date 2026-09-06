@@ -10,7 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
-from app.exports.pdfs import paragraph_text
+from app.exports.pdfs import append_pdfs, paragraph_text
 from app.forms.catalog import FORM_TYPES, get_form_type
 from app.forms.validate import normalize_payload, validate_payload
 from app.models import (
@@ -40,6 +40,7 @@ from app.services.timezones import (
     range_start_utc,
     to_utc_naive,
 )
+from app.storage.documents import is_pdf, normalize_certificate
 from app.storage.files import LocalFileStore
 from app.storage.images import IMAGE_EXTENSIONS, normalize_image
 
@@ -69,6 +70,7 @@ class LogService:
                 "description": item.description,
                 "schema": item.schema,
                 "allows_photos": item.allows_photos,
+                "allows_certificates": item.allows_certificates,
             }
             for item in FORM_TYPES
         ]
@@ -298,10 +300,15 @@ class LogService:
     ) -> LogAttachment:
         entry = self.get(household_id, log_id)
         form = get_form_type(entry.form_type_code)
-        if not form.allows_photos:
+        if form.allows_certificates:
+            data, media_type, stored_name = normalize_certificate(filename, data)
+        elif form.allows_photos:
+            data, media_type = normalize_image(data)
+            stored_name = (
+                f"{Path(filename).stem or 'photo'}{IMAGE_EXTENSIONS[media_type]}"
+            )
+        else:
             raise DomainError("This form does not accept photos")
-        data, media_type = normalize_image(data)
-        stored_name = f"{Path(filename).stem or 'photo'}{IMAGE_EXTENSIONS[media_type]}"
         path = self.files.save(household_id, f"logs/{log_id}", stored_name, data)
         attachment = LogAttachment(
             log_entry_id=entry.id,
@@ -444,6 +451,7 @@ class ExportService:
                 ),
             )
             story.append(Spacer(1, 6))
+        extra_pdfs: list[bytes] = []
         if include_photos:
             for attachment in entry.attachments:
                 story.append(Spacer(1, 12))
@@ -461,6 +469,9 @@ class ExportService:
                 story.append(
                     Paragraph(paragraph_text(attachment.filename), styles["Normal"])
                 )
+                if is_pdf(data):
+                    extra_pdfs.append(data)
+                    continue
                 story.append(
                     Image(
                         BytesIO(data),
@@ -479,7 +490,8 @@ class ExportService:
             bottomMargin=0.6 * inch,
         )
         doc.build(story)
-        return buffer.getvalue()
+        built = buffer.getvalue()
+        return append_pdfs(built, extra_pdfs) if extra_pdfs else built
 
 
 class PdfTemplateService:

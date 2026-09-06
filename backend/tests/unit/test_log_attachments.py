@@ -54,6 +54,8 @@ def test_form_types_mark_photo_capable_forms(client) -> None:
     assert rows["journal_entry"]["allows_photos"] is True
     assert rows["incident"]["allows_photos"] is True
     assert rows["fire_drill"]["allows_photos"] is False
+    assert rows["training"]["allows_certificates"] is True
+    assert rows["journal_entry"]["allows_certificates"] is False
 
 
 def test_attach_and_fetch_journal_photo(client, tmp_path, monkeypatch) -> None:
@@ -263,3 +265,118 @@ def test_entry_export_notes_missing_photo_files(client, tmp_path, monkeypatch) -
     assert "could not be loaded" in text.lower()
     assert "bruise" in text.lower()
     assert b"/XObject" not in response.content
+
+
+MIN_PDF = b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF\n"
+
+
+def _training(client, household_id: str) -> str:
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "training",
+            "occurred_at": datetime(2026, 8, 19, 18, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {"date": "2026-08-19", "topic": "CPR", "hours": "2"},
+        },
+    )
+    assert created.status_code == 201, created.text
+    return created.json()["id"]
+
+
+def test_attach_and_fetch_training_certificate_pdf(
+    client, tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    household_id = _household(client)
+    log_id = _training(client, household_id)
+    uploaded = client.post(
+        f"/api/households/{household_id}/logs/{log_id}/attachments",
+        files={"file": ("cpr.pdf", MIN_PDF, "application/pdf")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    body = uploaded.json()
+    assert body["filename"] == "cpr.pdf"
+    assert body["content_type"] == "application/pdf"
+    viewed = client.get(f"/api/households/{household_id}/logs/{log_id}")
+    assert viewed.json()["attachments"][0]["filename"] == "cpr.pdf"
+    fetched = client.get(
+        f"/api/households/{household_id}/logs/{log_id}/attachments/{body['id']}"
+    )
+    assert fetched.status_code == 200
+    assert fetched.headers["content-type"].startswith("application/pdf")
+    assert fetched.content.startswith(b"%PDF")
+
+
+def test_attach_training_certificate_image(client, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    household_id = _household(client)
+    log_id = _training(client, household_id)
+    uploaded = client.post(
+        f"/api/households/{household_id}/logs/{log_id}/attachments",
+        files={"file": ("cpr.png", PNG_1X1, "image/png")},
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    assert uploaded.json()["content_type"].startswith("image/png")
+
+
+def test_training_rejects_plain_text_certificate(client, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    household_id = _household(client)
+    log_id = _training(client, household_id)
+    rejected = client.post(
+        f"/api/households/{household_id}/logs/{log_id}/attachments",
+        files={"file": ("notes.txt", b"not a certificate", "text/plain")},
+    )
+    assert rejected.status_code == 400
+    assert "PDF" in rejected.json()["detail"]
+
+
+def _certificate_pdf(label: str) -> bytes:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.pdfgen import canvas as pdf_canvas
+
+    buffer = BytesIO()
+    painter = pdf_canvas.Canvas(buffer, pagesize=letter)
+    painter.drawString(72, 720, label)
+    painter.save()
+    return buffer.getvalue()
+
+
+def test_entry_export_includes_pdf_certificate(client, tmp_path, monkeypatch) -> None:
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    from app.core.config import get_settings
+
+    get_settings.cache_clear()
+    household_id = _household(client)
+    log_id = _training(client, household_id)
+    uploaded = client.post(
+        f"/api/households/{household_id}/logs/{log_id}/attachments",
+        files={
+            "file": (
+                "cpr.pdf",
+                _certificate_pdf("CPR wallet card"),
+                "application/pdf",
+            )
+        },
+    )
+    assert uploaded.status_code == 200, uploaded.text
+    response = client.get(
+        f"/api/households/{household_id}/logs/{log_id}/export?include_photos=true"
+    )
+    assert response.status_code == 200, response.text
+    assert response.content.startswith(b"%PDF")
+    text = _pdf_text(response.content)
+    assert "Training" in text
+    assert "CPR" in text
+    assert "cpr.pdf" in text
+    assert "CPR wallet card" in text

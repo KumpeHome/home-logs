@@ -367,3 +367,78 @@ describe('LogsPage journal photos', () => {
     expect(page.saveError()).toContain('HEIC photo could not be read');
   });
 });
+
+describe('LogsPage training certificates', () => {
+  it('lets you upload or scan a certificate on a training log', async () => {
+    const posted: unknown[] = [];
+    const uploaded: { path: string; form: FormData }[] = [];
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'training',
+                    name: 'Training',
+                    description: 'Foster parent training',
+                    scope: 'household',
+                    allows_certificates: true,
+                    schema: {
+                      properties: {
+                        date: { title: 'Date', format: 'date' },
+                        topic: { title: 'Topic' },
+                      },
+                    },
+                  },
+                ]);
+              }
+              if (path.includes('/members')) {
+                return of([]);
+              }
+              return of([]);
+            },
+            post: (_path: string, body: unknown) => {
+              posted.push(body);
+              return of({ id: 'log-12' });
+            },
+            upload: (path: string, form: FormData) => {
+              uploaded.push({ path, form });
+              return of({ id: 'att-cpr' });
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'training';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-test="log-certificate"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="scan-document"]')).toBeTruthy();
+    expect(host.textContent).toContain('Certificate');
+    expect(host.textContent).toContain('Scan with camera');
+    page.onCertificate(new File(['%PDF'], 'cpr.pdf', { type: 'application/pdf' }));
+    page.save({ date: '2026-08-19', topic: 'CPR' });
+    await fixture.whenStable();
+    const body = posted[0] as { payload: Record<string, unknown> };
+    expect(body.payload).not.toHaveProperty('certificate');
+    expect(uploaded.length).toBe(1);
+    expect(uploaded[0].path).toContain('/logs/log-12/attachments');
+    expect((uploaded[0].form.get('file') as File).name).toBe('cpr.pdf');
+  });
+});

@@ -236,6 +236,8 @@ def test_training_is_a_household_form() -> None:
     assert props["date"]["format"] == "date"
     assert "date" in form.schema["required"]
     assert "topic" in form.schema["required"]
+    assert form.allows_certificates is True
+    assert get_form_type("journal_entry").allows_certificates is False
 
 
 def test_family_visit_accepts_multiple_children() -> None:

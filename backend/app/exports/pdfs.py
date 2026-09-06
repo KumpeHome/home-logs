@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from pypdf import PdfReader, PdfWriter
+from pypdf.errors import PdfReadError, PdfStreamError
 from pypdf.generic import NameObject
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
@@ -289,6 +290,19 @@ def _fill_cfs400_page(home_line: str, rows: list[tuple[str, str, str, str]]) -> 
         del page[NameObject("/Annots")]
     if NameObject("/AcroForm") in writer._root_object:
         del writer._root_object[NameObject("/AcroForm")]
+    output = BytesIO()
+    writer.write(output)
+    return output.getvalue()
+
+
+def append_pdfs(base: bytes, extras: list[bytes]) -> bytes:
+    writer = PdfWriter()
+    writer.append(BytesIO(base))
+    for extra in extras:
+        try:
+            writer.append(BytesIO(extra))
+        except (PdfReadError, PdfStreamError, ValueError, OSError):
+            continue
     output = BytesIO()
     writer.write(output)
     return output.getvalue()
