@@ -24,7 +24,8 @@ services:
       OIDC_MANAGEMENT_API: ${OIDC_MANAGEMENT_API:-}
       AUTH_DISABLED: "false"
     volumes:
-      - uploads_data:/data/uploads
+      # Host path is the VM's CIFS/NFS mount. Override with PROD_UPLOADS_HOST_PATH.
+      - ${UPLOADS_HOST_PATH:-/mnt/home-logs/uploads}:/data/uploads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health')"]
       interval: 15s
@@ -51,6 +52,3 @@ services:
       interval: 15s
       timeout: 5s
       retries: 10
-
-volumes:
-  uploads_data:
