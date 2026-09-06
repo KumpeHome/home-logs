@@ -1,12 +1,14 @@
-import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
+import { Component, inject, signal } from '@angular/core';
+import { forkJoin, of } from 'rxjs';
 import { FormRenderer } from '../../shared/form-renderer';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { InitialsPad } from '../../shared/initials-pad';
 import { flagLabel, isAdministerable } from '../../shared/medication';
+import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
 
 @Component({
   selector: 'hl-logs',
@@ -21,14 +23,16 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
     </header>
     <div class="hl-card">
       <form class="hl-form" (ngSubmit)="start()">
-        <label>What happened
+        <label
+          >What happened
           <select [(ngModel)]="formCode" name="form">
             @for (form of forms(); track form.code) {
               <option [value]="form.code">{{ form.name }}</option>
             }
           </select>
         </label>
-        <label>Who is this for
+        <label
+          >Who is this for
           <select [(ngModel)]="memberId" name="member">
             <option value="">Whole household</option>
             @for (member of members(); track member.id) {
@@ -48,11 +52,17 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
         }
         @if (form.code === 'medication_administration') {
           <form class="hl-form" (ngSubmit)="saveMar()">
-            <label>Medication
+            <label
+              >Medication
               <select [(ngModel)]="mar.medication_id" name="med">
                 <option value="">Select a medication</option>
                 @for (med of meds(); track med.id) {
-                  <option [value]="med.id">{{ med.name }} {{ med.dose }}@if (med.is_otc) { (OTC) }</option>
+                  <option [value]="med.id">
+                    {{ med.name }} {{ med.dose }}
+                    @if (med.is_otc) {
+                      (OTC)
+                    }
+                  </option>
                 }
               </select>
             </label>
@@ -65,16 +75,34 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
                 </div>
               }
             }
-            <label>Date and time
-              <input type="datetime-local" [(ngModel)]="mar.occurred_at" name="when" data-test="mar-occurred" />
+            <label
+              >Date and time
+              <input
+                type="datetime-local"
+                [(ngModel)]="mar.occurred_at"
+                name="when"
+                data-test="mar-occurred"
+              />
             </label>
-            <label>Outcome
+            <label
+              >Outcome
               <select [(ngModel)]="mar.outcome" name="out">
-                <option>given</option><option>refused</option><option>missed</option><option>held</option>
+                <option>given</option>
+                <option>refused</option>
+                <option>missed</option>
+                <option>held</option>
               </select>
             </label>
-            <label>Number given
-              <input type="number" min="1" step="1" [(ngModel)]="mar.quantity_given" name="qty" data-test="quantity-given" />
+            <label
+              >Number given
+              <input
+                type="number"
+                min="1"
+                step="1"
+                [(ngModel)]="mar.quantity_given"
+                name="qty"
+                data-test="quantity-given"
+              />
             </label>
             <div class="field">
               <span>Your initials</span>
@@ -88,6 +116,22 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
             <button class="hl-btn">Record administration</button>
           </form>
         } @else {
+          @if (form.allows_photos) {
+            <label
+              >Photos
+              <input
+                type="file"
+                [accept]="photoAccept"
+                multiple
+                data-test="log-photos"
+                (change)="onPhotos($event)"
+              />
+            </label>
+            <p class="muted">
+              JPEG, PNG, GIF, WebP, or HEIC. HEIC photos from iPhone are converted automatically.
+              Photos stay with this record. They are not included on official reports.
+            </p>
+          }
           <hl-form-renderer [schema]="form.schema" [members]="members()" (saved)="save($event)" />
         }
       </section>
@@ -102,13 +146,21 @@ import { flagLabel, isAdministerable } from '../../shared/medication';
       @if (logs().length) {
         <div class="table-wrap">
           <table>
-            <tr><th>When</th><th>Form</th><th>Who</th><th>Status</th><th></th></tr>
+            <tr>
+              <th>When</th>
+              <th>Form</th>
+              <th>Who</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
             @for (log of logs(); track log.id) {
               <tr>
-                <td>{{ log.occurred_at | date:'short':timezone() }}</td>
+                <td>{{ log.occurred_at | date: 'short' : timezone() }}</td>
                 <td>{{ log.form_name }}</td>
                 <td>{{ log.subject_name || 'Household' }}</td>
-                <td><span class="hl-pill pending">{{ log.status }}</span></td>
+                <td>
+                  <span class="hl-pill pending">{{ log.status }}</span>
+                </td>
                 <td><a class="hl-btn secondary" [routerLink]="['/forms', log.id]">View</a></td>
               </tr>
             }
@@ -135,6 +187,8 @@ export class LogsPage {
   formCode = 'daily_care';
   memberId = '';
   mar: any = this.emptyMar();
+  photos: File[] = [];
+  readonly photoAccept = PHOTO_ACCEPT;
 
   constructor() {
     this.api.get<any[]>('/form-types').subscribe((rows) => {
@@ -151,11 +205,14 @@ export class LogsPage {
     if (!householdId) {
       return;
     }
-    this.api.get<any[]>(`/households/${householdId}/members`).subscribe((rows) => this.members.set(rows));
+    this.api
+      .get<any[]>(`/households/${householdId}/members`)
+      .subscribe((rows) => this.members.set(rows));
   }
 
   start(): void {
     this.saveError.set(null);
+    this.photos = [];
     this.loadMembers();
     const form = this.forms().find((item) => item.code === this.formCode);
     this.selected.set(form);
@@ -163,13 +220,29 @@ export class LogsPage {
       this.mar = this.emptyMar();
     }
     if (this.memberId) {
-      this.api.get<any>(`/households/${this.api.hid()}/members/${this.memberId}/profile`).subscribe((profile) => {
-        const rows = [...(profile.medications ?? []), ...(profile.otc_medications ?? [])].filter(
-          (item) => isAdministerable(item),
-        );
-        this.meds.set(rows);
-        this.mar.medication_id = rows[0]?.id ?? '';
-      });
+      this.api
+        .get<any>(`/households/${this.api.hid()}/members/${this.memberId}/profile`)
+        .subscribe((profile) => {
+          const rows = [...(profile.medications ?? []), ...(profile.otc_medications ?? [])].filter(
+            (item) => isAdministerable(item),
+          );
+          this.meds.set(rows);
+          this.mar.medication_id = rows[0]?.id ?? '';
+        });
+    }
+  }
+
+  async onPhotos(event: Event): Promise<void> {
+    const input = event.target as HTMLInputElement;
+    this.saveError.set(null);
+    try {
+      this.photos = await Promise.all(
+        Array.from(input.files ?? []).map((file) => preparePhoto(file)),
+      );
+    } catch (err) {
+      this.photos = [];
+      input.value = '';
+      this.saveError.set(err instanceof Error ? err.message : 'Could not read that photo.');
     }
   }
 
@@ -179,17 +252,42 @@ export class LogsPage {
       this.saveError.set('Select a household member before saving this form.');
       return;
     }
-    this.api.post(`/households/${this.api.hid()}/logs`, {
-      form_type_code: this.formCode,
-      subject_member_id: this.memberId || null,
-      occurred_at: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
-      submit: true,
-      payload,
-    }).subscribe({
-      next: () => this.refresh(),
+    this.api
+      .post<{ id: string }>(`/households/${this.api.hid()}/logs`, {
+        form_type_code: this.formCode,
+        subject_member_id: this.memberId || null,
+        occurred_at: occurredAt ? new Date(occurredAt).toISOString() : new Date().toISOString(),
+        submit: true,
+        payload,
+      })
+      .subscribe({
+        next: (entry) => this.afterSave(entry.id),
+        error: (err: { error?: { detail?: unknown } }) => {
+          const detail = err.error?.detail;
+          this.saveError.set(typeof detail === 'string' ? detail : 'Could not save this form.');
+        },
+      });
+  }
+
+  private afterSave(logId: string): void {
+    const uploads = this.photos.map((file) => {
+      const form = new FormData();
+      form.append('file', file, file.name);
+      return this.api.upload(`/households/${this.api.hid()}/logs/${logId}/attachments`, form);
+    });
+    const requests = uploads.length ? forkJoin(uploads) : of<unknown>(null);
+    requests.subscribe({
+      next: () => {
+        this.photos = [];
+        this.refresh();
+      },
       error: (err: { error?: { detail?: unknown } }) => {
         const detail = err.error?.detail;
-        this.saveError.set(typeof detail === 'string' ? detail : 'Could not save this form.');
+        this.saveError.set(
+          typeof detail === 'string' && detail.trim()
+            ? `Saved the record, but ${detail}`
+            : 'Saved the record, but photos could not be uploaded.',
+        );
       },
     });
   }
@@ -227,7 +325,9 @@ export class LogsPage {
   }
 
   refresh(): void {
-    this.api.get<any[]>(`/households/${this.api.hid()}/logs`).subscribe((rows) => this.logs.set(rows));
+    this.api
+      .get<any[]>(`/households/${this.api.hid()}/logs`)
+      .subscribe((rows) => this.logs.set(rows));
   }
 
   exportUrl(format: string): string {

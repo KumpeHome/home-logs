@@ -31,7 +31,18 @@ CFS400_TEMPLATE = (
 CFS400_ROWS_PER_PAGE = 6
 
 
-def initials_cell(value: str) -> Any:
+def paragraph_text(value: object) -> str:
+    if value is None:
+        return ""
+    return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def initials_cell(
+    value: str,
+    *,
+    width: float | None = None,
+    height: float | None = None,
+) -> Any:
     text = (value or "").strip()
     if not text.startswith("data:image"):
         return text
@@ -40,7 +51,11 @@ def initials_cell(value: str) -> Any:
         raw = base64.b64decode(encoded)
     except (ValueError, OSError):
         return ""
-    return Image(BytesIO(raw), width=0.7 * inch, height=0.32 * inch)
+    return Image(
+        BytesIO(raw),
+        width=width or 0.7 * inch,
+        height=height or 0.32 * inch,
+    )
 
 
 def _styles():

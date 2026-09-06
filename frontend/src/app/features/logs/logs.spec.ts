@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { LogsPage } from './logs';
 
@@ -56,7 +56,11 @@ describe('LogsPage medication administration', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [LogsPage],
-      providers: [provideHttpClient(), provideRouter([]), { provide: ApiService, useValue: apiMock }],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        { provide: ApiService, useValue: apiMock },
+      ],
     }).compileComponents();
   });
 
@@ -157,5 +161,209 @@ describe('LogsPage medication administration', () => {
     const body = posted[0] as { payload: { fp_initials: string; fc_initials: string } };
     expect(body.payload.fp_initials).toBe('data:image/png;base64,fp');
     expect(body.payload.fc_initials).toBe('data:image/png;base64,fc');
+  });
+});
+
+describe('LogsPage journal photos', () => {
+  it('lets the user attach photos to a journal entry without putting them in the payload', async () => {
+    const posted: unknown[] = [];
+    const uploaded: { path: string; form: FormData }[] = [];
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'journal_entry',
+                    name: 'Journal Entry',
+                    description: 'Document bruises',
+                    scope: 'member',
+                    allows_photos: true,
+                    schema: {
+                      properties: {
+                        date: { title: 'Date', format: 'date' },
+                        time: { title: 'Time', format: 'time' },
+                        incident: { title: 'Incident', 'x-widget': 'textarea' },
+                      },
+                    },
+                  },
+                ]);
+              }
+              if (path.includes('/members')) {
+                return of([{ id: 'm1', legal_name: 'Casey Child', household_role: 'child' }]);
+              }
+              return of([]);
+            },
+            post: (_path: string, body: unknown) => {
+              posted.push(body);
+              return of({ id: 'log-9' });
+            },
+            upload: (path: string, form: FormData) => {
+              uploaded.push({ path, form });
+              return of({ id: 'att-1' });
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'journal_entry';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const picker = host.querySelector('[data-test="log-photos"]') as HTMLInputElement;
+    expect(picker).toBeTruthy();
+    expect(picker.accept).toContain('heic');
+    expect(host.textContent).toContain('not included on official reports');
+    expect(host.textContent).toContain('HEIC');
+    const file = new File(['png'], 'bruise.png', { type: 'image/png' });
+    await page.onPhotos({ target: { files: [file] } } as unknown as Event);
+    page.save({ date: '2026-08-19', time: '16:30', incident: 'Scrape' });
+    await fixture.whenStable();
+    const body = posted[0] as { payload: Record<string, unknown> };
+    expect(body.payload).not.toHaveProperty('photos');
+    expect(uploaded.length).toBe(1);
+    expect(uploaded[0].path).toContain('/logs/log-9/attachments');
+    const sent = uploaded[0].form.get('file') as File;
+    expect(sent).toBeInstanceOf(File);
+    expect(sent.name).toBe('bruise.png');
+  });
+
+  it('gives unnamed camera photos a filename so the API treats them as a file part', async () => {
+    const uploaded: { path: string; form: FormData }[] = [];
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'incident',
+                    name: 'Incident Report',
+                    description: '',
+                    scope: 'member',
+                    allows_photos: true,
+                    schema: { properties: { notes: { title: 'Notes' } } },
+                  },
+                ]);
+              }
+              if (path.includes('/members')) {
+                return of([{ id: 'm1', legal_name: 'Casey Child', household_role: 'child' }]);
+              }
+              return of([]);
+            },
+            post: () => of({ id: 'log-10' }),
+            upload: (path: string, form: FormData) => {
+              uploaded.push({ path, form });
+              return of({ id: 'att-1' });
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'incident';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const unnamed = new File(['png'], '', { type: 'image/png' });
+    await page.onPhotos({ target: { files: [unnamed] } } as unknown as Event);
+    page.save({ notes: 'Scraped knee' });
+    await fixture.whenStable();
+    expect(uploaded.length).toBe(1);
+    expect((uploaded[0].form.get('file') as File).name).toBe('photo.jpg');
+  });
+
+  it('blocks unsupported files before save and shows the API detail if upload fails', async () => {
+    const uploaded: { path: string; form: FormData }[] = [];
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'incident',
+                    name: 'Incident Report',
+                    description: '',
+                    scope: 'member',
+                    allows_photos: true,
+                    schema: { properties: { notes: { title: 'Notes' } } },
+                  },
+                ]);
+              }
+              if (path.includes('/members')) {
+                return of([{ id: 'm1', legal_name: 'Casey Child', household_role: 'child' }]);
+              }
+              return of([]);
+            },
+            post: () => of({ id: 'log-11' }),
+            upload: (path: string, form: FormData) => {
+              uploaded.push({ path, form });
+              return throwError(() => ({
+                status: 400,
+                error: {
+                  detail:
+                    'This HEIC photo could not be read. Save it as JPEG or PNG and try again.',
+                },
+              }));
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'incident';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const pdf = new File(['%PDF'], 'scan.pdf', { type: 'application/pdf' });
+    await page.onPhotos({ target: { files: [pdf] } } as unknown as Event);
+    expect(page.saveError()).toMatch(/JPEG, PNG, GIF, WebP, or HEIC/i);
+    expect(page.photos).toEqual([]);
+    const png = new File(['png'], 'bruise.png', { type: 'image/png' });
+    await page.onPhotos({ target: { files: [png] } } as unknown as Event);
+    page.save({ notes: 'Scraped knee' });
+    await fixture.whenStable();
+    expect(page.saveError()).toContain('HEIC photo could not be read');
   });
 });

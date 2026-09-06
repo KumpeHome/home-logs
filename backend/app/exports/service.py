@@ -1,9 +1,15 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.exports.ar_dcfs_forms import (
+    foster_home_log_pdf,
+    journal_entries_pdf,
+    personal_belonging_pdf,
+    weekly_med_chart_pdf,
+)
 from app.exports.catalog import get_official_export, list_official_exports
 from app.exports.pdfs import (
     initials_cell,
@@ -11,7 +17,13 @@ from app.exports.pdfs import (
     quarterly_drills_pdf,
     sibling_contact_pdf,
 )
-from app.models import Household, HouseholdMember, LogEntry
+from app.models import (
+    Household,
+    HouseholdMember,
+    HouseholdOtcMedication,
+    LogEntry,
+    Medication,
+)
 from app.services.households import HouseholdService, legal_name
 from app.services.operations import LogService
 from app.services.timezones import format_clock_12h, local_date, local_time_hm
@@ -109,6 +121,20 @@ class OfficialExportService:
                 self._sibling_home_line(household_id),
                 self._sibling_rows(entries, selected),
             )
+        if spec.code == "ar_dcfs_weekly_med_chart":
+            return weekly_med_chart_pdf(
+                self._weekly_med_pages(entries, selected, tz_name)
+            )
+        if spec.code == "ar_dcfs_journal_entries":
+            return journal_entries_pdf(self._journal_pages(entries, selected))
+        if spec.code == "ar_dcfs_personal_belonging":
+            child_id = selected[0] if selected else ""
+            return personal_belonging_pdf(
+                _member_name(self.db, child_id),
+                self._belonging_items(entries, child_id),
+            )
+        if spec.code == "ar_dcfs_foster_home_log":
+            return self._foster_home_log(entries, start_date, tz_name)
         return medication_log_pdf(self._medication_pages(entries, selected, tz_name))
 
     def _timezone(self, household_id: str) -> str:
@@ -207,3 +233,186 @@ class OfficialExportService:
                 )
             pages.append((child, rows))
         return pages
+
+    def _weekly_med_pages(
+        self, entries: list[LogEntry], selected: list[str], tz_name: str
+    ) -> list[tuple[str, str, str, list[dict]]]:
+        pages: list[tuple[str, str, str, list[dict]]] = []
+        for member_id in selected:
+            weeks: dict[date, dict[str, dict]] = {}
+            for entry in sorted(entries, key=lambda item: item.occurred_at):
+                if entry.subject_member_id != member_id:
+                    continue
+                if entry.payload.get("outcome") not in (None, "", "given"):
+                    continue
+                day = local_date(entry.occurred_at, tz_name)
+                week = _week_start_sunday(day)
+                med_id = str(entry.payload.get("medication_id") or "")
+                name = str(entry.payload.get("medication_name") or "")
+                key = med_id or name
+                bucket = weeks.setdefault(week, {})
+                med = bucket.setdefault(
+                    key,
+                    {
+                        "name": name,
+                        "dose": str(entry.payload.get("dose_given") or ""),
+                        "frequency": self._medication_frequency(med_id),
+                        "days": {},
+                    },
+                )
+                initial = _dose_initial(entry, self.db)
+                day_index = (day.weekday() + 1) % 7
+                med["days"].setdefault(day_index, []).append(
+                    (local_time_hm(entry.occurred_at, tz_name), initial)
+                )
+            for week in sorted(weeks):
+                meds = list(weeks[week].values())
+                overflow: list[dict] = []
+                normalized: list[dict] = []
+                for med in meds:
+                    extra = _split_extra_dose_rows(med)
+                    normalized.append(med)
+                    overflow.extend(extra)
+                all_meds = [*normalized, *overflow]
+                end = week + timedelta(days=6)
+                stamp = _slash_date(week)
+                end_stamp = _slash_date(end)
+                child = _member_name(self.db, member_id)
+                if not all_meds:
+                    pages.append((child, stamp, end_stamp, []))
+                    continue
+                for index in range(0, len(all_meds), 4):
+                    pages.append((child, stamp, end_stamp, all_meds[index : index + 4]))
+        return pages
+
+    def _medication_frequency(self, medication_id: str) -> str:
+        if not medication_id:
+            return ""
+        med = self.db.get(Medication, medication_id)
+        if med is not None:
+            return med.frequency
+        otc = self.db.get(HouseholdOtcMedication, medication_id)
+        if otc is not None:
+            return "as needed"
+        return ""
+
+    def _journal_pages(
+        self, entries: list[LogEntry], selected: list[str]
+    ) -> list[tuple[str, list[tuple[str, str, str]]]]:
+        wanted = {item for item in selected if item}
+        pages: list[tuple[str, list[tuple[str, str, str]]]] = []
+        for member_id in selected:
+            rows: list[tuple[str, str, str]] = []
+            for entry in sorted(entries, key=lambda item: item.occurred_at):
+                if wanted and entry.subject_member_id not in wanted:
+                    continue
+                if entry.subject_member_id != member_id:
+                    continue
+                day = str(entry.payload.get("date") or "")
+                clock = format_clock_12h(str(entry.payload.get("time") or ""))
+                rows.append((day, clock, str(entry.payload.get("incident") or "")))
+            pages.append((_member_name(self.db, member_id), rows))
+        return pages
+
+    def _belonging_items(
+        self, entries: list[LogEntry], child_id: str
+    ) -> list[tuple[str, str, str, str, str]]:
+        items: list[tuple[str, str, str, str, str]] = []
+        for entry in sorted(entries, key=lambda item: item.occurred_at):
+            if child_id and entry.subject_member_id != child_id:
+                continue
+            recorded = str(entry.payload.get("recorded_on") or "")
+            initials = str(entry.payload.get("initials") or "")
+            stamp = " ".join(part for part in (recorded, initials) if part)
+            items.append(
+                (
+                    str(entry.payload.get("item_category") or ""),
+                    str(entry.payload.get("description") or ""),
+                    str(entry.payload.get("quantity") or ""),
+                    stamp,
+                    str(entry.payload.get("disposition") or ""),
+                )
+            )
+        return items
+
+    def _foster_home_log(
+        self, entries: list[LogEntry], start_date: date, tz_name: str
+    ) -> bytes:
+        month_name = start_date.strftime("%B")
+        trainings: list[str] = []
+        drills: list[str] = []
+        visits: list[tuple[str, str, str]] = []
+        for entry in sorted(entries, key=lambda item: item.occurred_at):
+            if entry.form_type_code == "training":
+                day = str(entry.payload.get("date") or "")
+                topic = str(entry.payload.get("topic") or "")
+                hours = str(entry.payload.get("hours") or "")
+                notes = str(entry.payload.get("notes") or "")
+                extra = f" ({hours} hrs)" if hours else ""
+                note = f" — {notes}" if notes else ""
+                trainings.append(f"{day}  {topic}{extra}{note}".strip())
+            elif entry.form_type_code == "fire_drill":
+                names = [
+                    _resolve_label(self.db, str(value))
+                    for value in entry.payload.get("participants") or []
+                ]
+                when = str(entry.payload.get("date") or "")
+                start = format_clock_12h(str(entry.payload.get("start_time") or ""))
+                seconds = entry.payload.get("evacuation_seconds")
+                duration = f"{seconds} seconds" if seconds not in (None, "") else ""
+                drills.append(
+                    " · ".join(
+                        part
+                        for part in (when, start, ", ".join(names), duration)
+                        if part
+                    )
+                )
+            elif entry.form_type_code == "case_worker_visit":
+                when = local_date(entry.occurred_at, tz_name).isoformat()
+                worker = str(entry.payload.get("worker_name") or "")
+                children = [
+                    _resolve_label(self.db, str(value))
+                    for value in entry.payload.get("children_visited") or []
+                ]
+                if children:
+                    for child in children:
+                        visits.append((child, when, worker))
+                else:
+                    visits.append(("", when, worker))
+        return foster_home_log_pdf(month_name, trainings, drills, visits)
+
+
+def _week_start_sunday(day: date) -> date:
+    return day - timedelta(days=(day.weekday() + 1) % 7)
+
+
+def _slash_date(day: date) -> str:
+    return day.strftime("%m/%d/%y")
+
+
+def _dose_initial(entry: LogEntry, db: Session) -> str:
+    drawn = str(entry.payload.get("fp_initials") or "").strip()
+    if drawn:
+        return drawn
+    return _initials(_member_name(db, entry.recorded_by_id))
+
+
+def _split_extra_dose_rows(med: dict) -> list[dict]:
+    extras: list[dict] = []
+    overflow_days: dict[int, list[tuple[str, str]]] = {}
+    for day_index, entries in list(med.get("days", {}).items()):
+        if len(entries) > 2:
+            overflow_days[day_index] = entries[2:]
+            med["days"][day_index] = entries[:2]
+    if not overflow_days:
+        return extras
+    extras.append(
+        {
+            "name": med.get("name"),
+            "dose": med.get("dose"),
+            "frequency": med.get("frequency"),
+            "days": overflow_days,
+        }
+    )
+    extras.extend(_split_extra_dose_rows(extras[-1]))
+    return extras

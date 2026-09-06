@@ -66,7 +66,7 @@ from app.services.operations import (
 )
 from app.services.otc import OtcService, serialize_assignment, serialize_otc
 from app.storage.files import LocalFileStore
-from app.storage.images import IMAGE_EXTENSIONS, sniff_image_media_type
+from app.storage.images import IMAGE_EXTENSIONS, normalize_image, sniff_image_media_type
 
 members_router = APIRouter()
 logs_router = APIRouter()
@@ -316,8 +316,7 @@ async def upload_photo(
     file: UploadFile = File(...),
 ) -> dict:
     service.require_membership(household_id, user)
-    data = await file.read()
-    media_type = sniff_image_media_type(data)
+    data, media_type = normalize_image(await file.read())
     path = LocalFileStore().save(
         household_id,
         f"photos/{member_id}",
@@ -537,6 +536,72 @@ def get_log(
     entry = LogService(db).get(household_id, log_id)
     PermissionService(db).require_form(household_id, user, entry.form_type_code, "view")
     return serialize_log(entry, db)
+
+
+@logs_router.post("/households/{household_id}/logs/{log_id}/attachments")
+async def attach_log_photo(
+    household_id: str,
+    log_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(LOGS_WRITE))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+    file: UploadFile = File(...),
+) -> dict:
+    service.require_membership(household_id, user)
+    entry = LogService(db).get(household_id, log_id)
+    PermissionService(db).require_form(household_id, user, entry.form_type_code, "add")
+    data = await file.read()
+    attachment = LogService(db).attach(
+        household_id, log_id, file.filename or "photo", data
+    )
+    return {
+        "id": attachment.id,
+        "filename": attachment.filename,
+        "content_type": attachment.content_type,
+    }
+
+
+@logs_router.get("/households/{household_id}/logs/{log_id}/attachments/{attachment_id}")
+def get_log_photo(
+    household_id: str,
+    log_id: str,
+    attachment_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(LOGS_READ))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    service.require_membership(household_id, user)
+    logs = LogService(db)
+    entry = logs.get(household_id, log_id)
+    PermissionService(db).require_form(household_id, user, entry.form_type_code, "view")
+    attachment = logs.get_attachment(household_id, log_id, attachment_id)
+    try:
+        data = LocalFileStore().read(attachment.storage_path)
+    except FileNotFoundError as exc:
+        raise DomainError("Photo not found", 404) from exc
+    return Response(content=data, media_type=sniff_image_media_type(data))
+
+
+@logs_router.get("/households/{household_id}/logs/{log_id}/export")
+def export_log_entry(
+    household_id: str,
+    log_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(LOGS_EXPORT))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+    include_photos: bool = Query(False),
+) -> Response:
+    service.require_membership(household_id, user)
+    entry = LogService(db).get(household_id, log_id)
+    PermissionService(db).require_form(
+        household_id, user, entry.form_type_code, "export"
+    )
+    content = ExportService(db).entry_pdf(entry, include_photos=include_photos)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=log-entry.pdf"},
+    )
 
 
 @logs_router.patch("/households/{household_id}/logs/{log_id}")

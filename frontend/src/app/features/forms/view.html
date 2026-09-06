@@ -4,10 +4,34 @@
     <p class="eyebrow">Record</p>
     <h1>{{ entry.form_name }}</h1>
     <p class="lede">
-      {{ entry.occurred_at | date:'short':timezone() }}
-      · {{ entry.subject_name || 'Household' }}
-      · {{ entry.status }}
+      {{ entry.occurred_at | date: 'short' : timezone() }}
+      · {{ entry.subject_name || 'Household' }} · {{ entry.status }}
     </p>
+    @if (error(); as message) {
+      <p class="error">{{ message }}</p>
+    }
+    <div class="actions">
+      <button
+        class="hl-btn secondary"
+        type="button"
+        data-test="export-entry"
+        [disabled]="exporting()"
+        (click)="exportEntry(false)"
+      >
+        Export PDF
+      </button>
+      @if (photos().length) {
+        <button
+          class="hl-btn secondary"
+          type="button"
+          data-test="export-entry-photos"
+          [disabled]="exporting()"
+          (click)="exportEntry(true)"
+        >
+          Export PDF with photos
+        </button>
+      }
+    </div>
   </header>
   <section class="hl-card">
     <h2>Submitted answers</h2>
@@ -24,4 +48,17 @@
       }
     </dl>
   </section>
+  @if (photos().length) {
+    <section class="hl-card">
+      <h2>Photos</h2>
+      <div class="photos">
+        @for (photo of photos(); track photo.id) {
+          <figure>
+            <img [src]="photo.url" [alt]="photo.filename" />
+            <figcaption>{{ photo.filename }}</figcaption>
+          </figure>
+        }
+      </div>
+    </section>
+  }
 }

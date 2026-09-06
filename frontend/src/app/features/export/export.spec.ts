@@ -22,8 +22,28 @@ describe('ExportPage', () => {
             category: 'Arkansas DCFS',
           },
           {
+            code: 'ar_dcfs_weekly_med_chart',
+            name: 'Weekly Medication Chart',
+            category: 'Arkansas DCFS',
+          },
+          {
             code: 'ar_dcfs_sibling_contact',
             name: 'Separated Sibling Contact Report',
+            category: 'Arkansas DCFS',
+          },
+          {
+            code: 'ar_dcfs_journal_entries',
+            name: 'Journal Entries',
+            category: 'Arkansas DCFS',
+          },
+          {
+            code: 'ar_dcfs_personal_belonging',
+            name: 'Personal Belonging Inventory Log',
+            category: 'Arkansas DCFS',
+          },
+          {
+            code: 'ar_dcfs_foster_home_log',
+            name: 'Foster Home Log',
             category: 'Arkansas DCFS',
           },
         ]);
@@ -65,6 +85,10 @@ describe('ExportPage', () => {
     expect(host.textContent).toContain('Quarterly Fire/Tornado Drills');
     expect(host.textContent).toContain('Medication Dosage Logs');
     expect(host.textContent).toContain('Separated Sibling Contact Report');
+    expect(host.textContent).toContain('Weekly Medication Chart');
+    expect(host.textContent).toContain('Journal Entries');
+    expect(host.textContent).toContain('Personal Belonging Inventory Log');
+    expect(host.textContent).toContain('Foster Home Log');
     expect(host.querySelector('[data-test="export-start"]')).toBeTruthy();
     expect(host.querySelector('[data-test="export-end"]')).toBeTruthy();
     expect(host.querySelector('[data-test="download-pdf"]')).toBeTruthy();
@@ -88,6 +112,16 @@ describe('ExportPage', () => {
     fixture.detectChanges();
     expect(host.querySelector('[data-test="export-member"]')).toBeTruthy();
     expect(host.textContent).toContain('Casey Child');
+    page.formCode.set('ar_dcfs_weekly_med_chart');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="export-member"]')).toBeTruthy();
+    page.formCode.set('ar_dcfs_journal_entries');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="export-member"]')).toBeTruthy();
+    page.formCode.set('ar_dcfs_foster_home_log');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="export-member"]')).toBeNull();
+    expect(host.querySelector('[data-test="export-subject"]')).toBeNull();
   });
 
   it('downloads the filled official form for the selected range and members', async () => {
@@ -143,5 +177,23 @@ describe('ExportPage', () => {
     await page.download();
     expect(posted.body.form_code).toBe('ar_dcfs_sibling_contact');
     expect(posted.body.member_ids).toEqual(['m2']);
+  });
+
+  it('lets the user pick who the personal belonging log is for', async () => {
+    const fixture = TestBed.createComponent(ExportPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    page.formCode.set('ar_dcfs_personal_belonging');
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.querySelector('[data-test="export-subject"]')).toBeTruthy();
+    page.exportSubject.set('m1');
+    page.startDate = '2026-08-01';
+    page.endDate = '2026-08-31';
+    await page.download();
+    expect(posted.body.form_code).toBe('ar_dcfs_personal_belonging');
+    expect(posted.body.member_ids).toEqual(['m1']);
   });
 });

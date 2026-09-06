@@ -33,10 +33,34 @@ OFFICIAL_EXPORTS: tuple[OfficialExport, ...] = (
         source_forms=("medication_administration",),
     ),
     OfficialExport(
+        code="ar_dcfs_weekly_med_chart",
+        name="Weekly Medication Chart",
+        description="Arkansas DCFS CFS-372 weekly medication chart by child.",
+        source_forms=("medication_administration",),
+    ),
+    OfficialExport(
         code="ar_dcfs_sibling_contact",
         name="Separated Sibling Contact Report",
         description="Arkansas DCFS CFS-400 sibling contact log for foster parents.",
         source_forms=("sibling_contact",),
+    ),
+    OfficialExport(
+        code="ar_dcfs_journal_entries",
+        name="Journal Entries",
+        description="Journal of injuries, medication changes, and unusual behavior.",
+        source_forms=("journal_entry",),
+    ),
+    OfficialExport(
+        code="ar_dcfs_personal_belonging",
+        name="Personal Belonging Inventory Log",
+        description="Arkansas DCFS CFS-350 personal belonging inventory.",
+        source_forms=("personal_belonging",),
+    ),
+    OfficialExport(
+        code="ar_dcfs_foster_home_log",
+        name="Foster Home Log",
+        description="Monthly summary of training, fire drills, and worker visits.",
+        source_forms=("training", "fire_drill", "case_worker_visit"),
     ),
 )
 

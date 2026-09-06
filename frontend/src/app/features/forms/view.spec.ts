@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { ActivatedRoute, convertToParamMap, provideRouter } from '@angular/router';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { FormViewPage } from './view';
 
@@ -75,5 +75,147 @@ describe('FormViewPage', () => {
     expect(text).toContain('Front oak');
     expect(text).toContain('Seconds to evacuate');
     expect(text).toContain('47');
+    expect(fixture.nativeElement.querySelector('[data-test="export-entry"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-test="export-entry-photos"]')).toBeNull();
+  });
+
+  it('shows photos and lets the user export the entry with or without them', async () => {
+    const blobs: string[] = [];
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [FormViewPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([{ path: 'forms/:id', component: FormViewPage }]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'log-2' }) } },
+        },
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'journal_entry',
+                    name: 'Journal Entry',
+                    schema: {
+                      properties: {
+                        date: { title: 'Date' },
+                        incident: { title: 'Incident' },
+                      },
+                    },
+                  },
+                ]);
+              }
+              if (path.endsWith('/logs/log-2')) {
+                return of({
+                  id: 'log-2',
+                  form_type_code: 'journal_entry',
+                  form_name: 'Journal Entry',
+                  occurred_at: '2026-08-19T21:30:00',
+                  status: 'submitted',
+                  subject_name: 'Casey Child',
+                  payload: { date: '2026-08-19', incident: 'Small scrape' },
+                  attachments: [{ id: 'att-1', filename: 'bruise.png', content_type: 'image/png' }],
+                });
+              }
+              if (path.includes('/members')) {
+                return of([]);
+              }
+              return of([]);
+            },
+            getBlob: (path: string) => {
+              blobs.push(path);
+              return of(new Blob(['fake'], { type: 'image/png' }));
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    URL.createObjectURL = () => 'blob:fake-photo';
+    const fixture = TestBed.createComponent(FormViewPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('Photos');
+    expect(host.querySelector('img[alt="bruise.png"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="export-entry"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="export-entry-photos"]')).toBeTruthy();
+    expect(blobs.some((path) => path.includes('/attachments/att-1'))).toBe(true);
+  });
+
+  it('explains when a stored photo cannot be loaded', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [FormViewPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([{ path: 'forms/:id', component: FormViewPage }]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'log-3' }) } },
+        },
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'journal_entry',
+                    name: 'Journal Entry',
+                    schema: { properties: { incident: { title: 'Incident' } } },
+                  },
+                ]);
+              }
+              if (path.endsWith('/logs/log-3')) {
+                return of({
+                  id: 'log-3',
+                  form_type_code: 'journal_entry',
+                  form_name: 'Journal Entry',
+                  occurred_at: '2026-08-19T21:30:00',
+                  status: 'submitted',
+                  subject_name: 'Casey Child',
+                  payload: { incident: 'Small scrape' },
+                  attachments: [
+                    { id: 'att-ok', filename: 'ok.png', content_type: 'image/png' },
+                    { id: 'att-missing', filename: 'gone.png', content_type: 'image/png' },
+                  ],
+                });
+              }
+              if (path.includes('/members')) {
+                return of([]);
+              }
+              return of([]);
+            },
+            getBlob: (path: string) => {
+              if (path.includes('att-missing')) {
+                return throwError(() => ({ status: 404, error: { detail: 'Photo not found' } }));
+              }
+              return of(new Blob(['fake'], { type: 'image/png' }));
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    URL.createObjectURL = () => 'blob:ok-photo';
+    const fixture = TestBed.createComponent(FormViewPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    expect(page.error()).toContain('could not be loaded');
+    expect(page.photos().length).toBe(1);
+    expect(page.photos()[0].filename).toBe('ok.png');
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('could not be loaded');
+    expect(host.querySelector('img[alt="ok.png"]')).toBeTruthy();
   });
 });
