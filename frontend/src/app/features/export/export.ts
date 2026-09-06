@@ -23,7 +23,8 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
         <p class="error">{{ error() }}</p>
       }
       <form class="hl-form" (submit)="$event.preventDefault()">
-        <label>Category
+        <label
+          >Category
           <select
             data-test="export-category"
             [ngModel]="category()"
@@ -35,7 +36,8 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
             }
           </select>
         </label>
-        <label>Form
+        <label
+          >Form
           <select
             data-test="export-form"
             [ngModel]="formCode()"
@@ -47,10 +49,12 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
             }
           </select>
         </label>
-        <label>From
+        <label
+          >From
           <input data-test="export-start" type="date" [(ngModel)]="startDate" name="start" />
         </label>
-        <label>To
+        <label
+          >To
           <input data-test="export-end" type="date" [(ngModel)]="endDate" name="end" />
         </label>
         @if (needsMemberCheckboxes()) {
@@ -70,7 +74,8 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
           </fieldset>
         }
         @if (needsExportSubject()) {
-          <label>Exporting for
+          <label
+            >Exporting for
             <select
               data-test="export-subject"
               [ngModel]="exportSubject()"
@@ -83,16 +88,31 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
             </select>
           </label>
         }
-        <button class="hl-btn" type="button" data-test="download-pdf" [disabled]="downloading()" (click)="download()">
+        <button
+          class="hl-btn"
+          type="button"
+          data-test="download-pdf"
+          [disabled]="downloading()"
+          (click)="download()"
+        >
           {{ downloading() ? 'Preparing…' : 'Download PDF' }}
         </button>
       </form>
     </section>
   `,
   styles: `
-    fieldset { border: 1px solid var(--hl-line); border-radius: 12px; padding: 0.75rem 1rem; }
-    fieldset legend { padding: 0 0.35rem; }
-    fieldset .inline { display: block; margin: 0.35rem 0; }
+    fieldset {
+      border: 1px solid var(--hl-line);
+      border-radius: 12px;
+      padding: 0.75rem 1rem;
+    }
+    fieldset legend {
+      padding: 0 0.35rem;
+    }
+    fieldset .inline {
+      display: block;
+      margin: 0.35rem 0;
+    }
   `,
 })
 export class ExportPage {
@@ -130,7 +150,13 @@ export class ExportPage {
   }
 
   categories(): string[] {
-    return [...new Set(this.forms().map((form) => form.category).filter(Boolean))];
+    return [
+      ...new Set(
+        this.forms()
+          .map((form) => form.category)
+          .filter(Boolean),
+      ),
+    ];
   }
 
   formsInCategory(): ExportForm[] {
@@ -155,11 +181,18 @@ export class ExportPage {
   }
 
   needsMemberCheckboxes(): boolean {
-    return this.formCode() === 'ar_dcfs_medication_log';
+    return (
+      this.formCode() === 'ar_dcfs_medication_log' ||
+      this.formCode() === 'ar_dcfs_weekly_med_chart' ||
+      this.formCode() === 'ar_dcfs_journal_entries'
+    );
   }
 
   needsExportSubject(): boolean {
-    return this.formCode() === 'ar_dcfs_sibling_contact';
+    return (
+      this.formCode() === 'ar_dcfs_sibling_contact' ||
+      this.formCode() === 'ar_dcfs_personal_belonging'
+    );
   }
 
   needsMembers(): boolean {
@@ -176,6 +209,18 @@ export class ExportPage {
         'filled on the official CFS-400, including Foster Home Name and Provider ID ' +
         'from household name and license number.'
       );
+    }
+    if (this.formCode() === 'ar_dcfs_weekly_med_chart') {
+      return 'Choose a date range and children. Home Logs fills a CFS-372 chart for each week that has doses.';
+    }
+    if (this.formCode() === 'ar_dcfs_journal_entries') {
+      return 'Choose a date range and children. Submitted journal entries fill Date, Time, and Incident.';
+    }
+    if (this.formCode() === 'ar_dcfs_personal_belonging') {
+      return 'Choose a child and a date range. Belonging records fill the official CFS-350 inventory.';
+    }
+    if (this.formCode() === 'ar_dcfs_foster_home_log') {
+      return 'Choose a month. Training, fire drills, and worker visits from that month are summarized.';
     }
     return 'Choose a date range and who to include. Home Logs fills the PDF from submitted records.';
   }

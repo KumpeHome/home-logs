@@ -4,6 +4,18 @@ import { Observable } from 'rxjs';
 import { environment } from './environment';
 import { AuthService } from './auth.service';
 
+async function parseBody(response: Response): Promise<unknown> {
+  const text = await response.text();
+  if (!text) {
+    return null;
+  }
+  try {
+    return JSON.parse(text) as unknown;
+  } catch {
+    return text;
+  }
+}
+
 @Injectable({ providedIn: 'root' })
 export class ApiService {
   private readonly http = inject(HttpClient);
@@ -30,22 +42,42 @@ export class ApiService {
   }
 
   upload<T>(path: string, form: FormData): Observable<T> {
-    return this.sendFile<T>(`${environment.apiUrl}${path}`, form, null);
+    return this.sendForm<T>(`${environment.apiUrl}${path}`, form);
   }
 
   uploadFile<T>(path: string, file: Blob): Observable<T> {
-    return this.sendFile<T>(
-      `${environment.apiUrl}${path}`,
-      file,
-      file.type || 'application/pdf',
-    );
+    return this.sendFile<T>(`${environment.apiUrl}${path}`, file, file.type || 'application/pdf');
   }
 
-  private sendFile<T>(
-    url: string,
-    body: Blob | FormData,
-    contentType: string | null,
-  ): Observable<T> {
+  private sendForm<T>(url: string, form: FormData): Observable<T> {
+    return new Observable((subscriber) => {
+      const headers = new Headers();
+      const token = this.auth.token();
+      if (token) {
+        headers.set('Authorization', `Bearer ${token}`);
+      }
+      const controller = new AbortController();
+      fetch(url, { method: 'POST', body: form, headers, signal: controller.signal })
+        .then(async (response) => {
+          const parsed = await parseBody(response);
+          if (response.ok) {
+            subscriber.next(parsed as T);
+            subscriber.complete();
+            return;
+          }
+          subscriber.error({ status: response.status, error: parsed });
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') {
+            return;
+          }
+          subscriber.error({ status: 0, error: null });
+        });
+      return () => controller.abort();
+    });
+  }
+
+  private sendFile<T>(url: string, body: Blob, contentType: string): Observable<T> {
     return new Observable((subscriber) => {
       const xhr = new XMLHttpRequest();
       xhr.open('POST', url);
@@ -53,9 +85,7 @@ export class ApiService {
       if (token) {
         xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       }
-      if (contentType) {
-        xhr.setRequestHeader('Content-Type', contentType);
-      }
+      xhr.setRequestHeader('Content-Type', contentType);
       xhr.onload = () => {
         let parsed: unknown = null;
         if (xhr.responseText) {
@@ -94,4 +124,3 @@ export class ApiService {
     return this.http.post(`${environment.apiUrl}${path}`, body, { responseType: 'blob' });
   }
 }
-

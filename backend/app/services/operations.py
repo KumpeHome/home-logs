@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import DomainError
+from app.exports.pdfs import paragraph_text
 from app.forms.catalog import FORM_TYPES, get_form_type
 from app.forms.validate import normalize_payload, validate_payload
 from app.models import (
@@ -40,6 +41,7 @@ from app.services.timezones import (
     to_utc_naive,
 )
 from app.storage.files import LocalFileStore
+from app.storage.images import IMAGE_EXTENSIONS, normalize_image
 
 
 def _now() -> datetime:
@@ -66,6 +68,7 @@ class LogService:
                 "scope": item.scope,
                 "description": item.description,
                 "schema": item.schema,
+                "allows_photos": item.allows_photos,
             }
             for item in FORM_TYPES
         ]
@@ -291,19 +294,32 @@ class LogService:
         household_id: str,
         log_id: str,
         filename: str,
-        content_type: str,
         data: bytes,
     ) -> LogAttachment:
         entry = self.get(household_id, log_id)
-        path = self.files.save(household_id, f"logs/{log_id}", filename, data)
+        form = get_form_type(entry.form_type_code)
+        if not form.allows_photos:
+            raise DomainError("This form does not accept photos")
+        data, media_type = normalize_image(data)
+        stored_name = f"{Path(filename).stem or 'photo'}{IMAGE_EXTENSIONS[media_type]}"
+        path = self.files.save(household_id, f"logs/{log_id}", stored_name, data)
         attachment = LogAttachment(
             log_entry_id=entry.id,
-            filename=filename,
-            content_type=content_type,
+            filename=stored_name,
+            content_type=media_type,
             storage_path=path,
         )
         self.db.add(attachment)
         self.db.flush()
+        return attachment
+
+    def get_attachment(
+        self, household_id: str, log_id: str, attachment_id: str
+    ) -> LogAttachment:
+        entry = self.get(household_id, log_id)
+        attachment = self.db.get(LogAttachment, attachment_id)
+        if attachment is None or attachment.log_entry_id != entry.id:
+            raise DomainError("Photo not found", 404)
         return attachment
 
 
@@ -382,6 +398,87 @@ class ExportService:
                 pdf.showPage()
                 y = height - 48
         pdf.save()
+        return buffer.getvalue()
+
+    def entry_pdf(self, entry: LogEntry, *, include_photos: bool) -> bytes:
+        from reportlab.lib.pagesizes import letter
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib.units import inch
+        from reportlab.platypus import (
+            Image,
+            Paragraph,
+            SimpleDocTemplate,
+            Spacer,
+        )
+
+        form = get_form_type(entry.form_type_code)
+        member_name = ""
+        if entry.subject_member_id:
+            member = self.db.get(HouseholdMember, entry.subject_member_id)
+            member_name = legal_name(member.profile) if member else ""
+        styles = getSampleStyleSheet()
+        stamp = entry.occurred_at.isoformat(sep=" ", timespec="minutes")
+        story: list = [
+            Paragraph(paragraph_text(form.name), styles["Title"]),
+            Spacer(1, 8),
+            Paragraph(
+                " · ".join(
+                    [
+                        paragraph_text(stamp),
+                        paragraph_text(member_name or "Household"),
+                        paragraph_text(entry.status),
+                    ]
+                ),
+                styles["Normal"],
+            ),
+            Spacer(1, 14),
+        ]
+        for key, value in entry.payload.items():
+            if isinstance(value, str) and value.startswith("data:image"):
+                continue
+            label = str(key).replace("_", " ").title()
+            story.append(
+                Paragraph(
+                    f"<b>{paragraph_text(label)}</b>: {paragraph_text(value)}",
+                    styles["Normal"],
+                ),
+            )
+            story.append(Spacer(1, 6))
+        if include_photos:
+            for attachment in entry.attachments:
+                story.append(Spacer(1, 12))
+                try:
+                    data = self.logs.files.read(attachment.storage_path)
+                except FileNotFoundError:
+                    story.append(
+                        Paragraph(
+                            "<i>Photo could not be loaded:</i> "
+                            + paragraph_text(attachment.filename),
+                            styles["Normal"],
+                        )
+                    )
+                    continue
+                story.append(
+                    Paragraph(paragraph_text(attachment.filename), styles["Normal"])
+                )
+                story.append(
+                    Image(
+                        BytesIO(data),
+                        width=5.5 * inch,
+                        height=4 * inch,
+                        kind="proportional",
+                    )
+                )
+        buffer = BytesIO()
+        doc = SimpleDocTemplate(
+            buffer,
+            pagesize=letter,
+            leftMargin=0.7 * inch,
+            rightMargin=0.7 * inch,
+            topMargin=0.6 * inch,
+            bottomMargin=0.6 * inch,
+        )
+        doc.build(story)
         return buffer.getvalue()
 
 

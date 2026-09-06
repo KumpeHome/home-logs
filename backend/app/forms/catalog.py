@@ -14,6 +14,7 @@ class FormType:
     description: str
     schema: dict
     export_paths: tuple[str, ...] = field(default_factory=tuple)
+    allows_photos: bool = False
 
 
 def _string(title: str, **extra: object) -> dict:
@@ -421,6 +422,7 @@ INCIDENT = FormType(
         },
         ["severity", "location", "what_happened"],
     ),
+    allows_photos=True,
 )
 
 RPP = FormType(
@@ -677,6 +679,102 @@ CHORE = FormType(
     ),
 )
 
+JOURNAL_ENTRY = FormType(
+    code="journal_entry",
+    name="Journal Entry",
+    category="foster",
+    scope="member",
+    description=(
+        "Document bruises, scrapes, cuts, medication changes that affect "
+        "behavior, or unusual behavior."
+    ),
+    schema=_object(
+        "Journal Entry",
+        {
+            "date": _date("Date"),
+            "time": _time("Time"),
+            "incident": {
+                "type": "string",
+                "title": "Incident",
+                "x-widget": "textarea",
+            },
+        },
+        ["date", "time", "incident"],
+    ),
+    export_paths=("payload.date", "payload.time", "payload.incident"),
+    allows_photos=True,
+)
+
+BELONGING_CATEGORIES = (
+    "Shoes",
+    "Pairs of Socks",
+    "Underwear",
+    "Bras",
+    "Pantyhose",
+    "Dress Slip",
+    "T-Shirts",
+    "Tank Top",
+    "Sweat Shirts/Hoodies",
+    "Dress Shirts",
+    "Jeans",
+    "Dress Pants",
+    "Dresses",
+    "Skirts",
+    "Shorts",
+    "Belts",
+    "Scarfs",
+    "Hats",
+    "Gloves",
+    "Coats",
+    "Jackets",
+    "Other",
+)
+
+PERSONAL_BELONGING = FormType(
+    code="personal_belonging",
+    name="Personal Belonging",
+    category="foster",
+    scope="member",
+    description="Inventory a child's clothing and personal possessions (CFS-350).",
+    schema=_object(
+        "Personal Belonging",
+        {
+            "item_category": {
+                "type": "string",
+                "title": "Item",
+                "enum": list(BELONGING_CATEGORIES),
+            },
+            "description": _string("Description / size / condition"),
+            "quantity": _integer("Quantity", minimum=0),
+            "recorded_on": _date("Date"),
+            "initials": _string("Initials"),
+            "disposition": _string(
+                "Disposition (thrown away, donated, outgrown) / purchases"
+            ),
+        },
+        ["item_category", "quantity"],
+    ),
+)
+
+TRAINING = FormType(
+    code="training",
+    name="Training",
+    category="household",
+    scope="household",
+    description="Foster parent or household training attended this month.",
+    schema=_object(
+        "Training",
+        {
+            "date": _date("Date"),
+            "topic": _string("Topic"),
+            "hours": _string("Hours"),
+            "notes": _string("Notes"),
+        },
+        ["date", "topic"],
+    ),
+    export_paths=("payload.date", "payload.topic", "payload.hours", "payload.notes"),
+)
+
 FORM_TYPES: tuple[FormType, ...] = (
     FIRE_DRILL,
     TORNADO_DRILL,
@@ -684,6 +782,7 @@ FORM_TYPES: tuple[FormType, ...] = (
     GUEST_VISITOR,
     HOME_MAINTENANCE,
     HOUSEHOLD_MEETING,
+    TRAINING,
     CASE_WORKER_VISIT,
     SIBLING_CONTACT,
     FAMILY_VISIT,
@@ -691,6 +790,8 @@ FORM_TYPES: tuple[FormType, ...] = (
     GAL_CONTACT,
     RESPITE,
     INCIDENT,
+    JOURNAL_ENTRY,
+    PERSONAL_BELONGING,
     RPP,
     ALLOWANCE,
     LIFE_SKILLS,

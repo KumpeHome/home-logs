@@ -8,6 +8,7 @@ import { AuthService } from '../../core/auth.service';
 import { MemberPhoto } from '../../shared/member-photo';
 import { composeDose, DOSE_UNITS, parseDose } from '../../shared/dose';
 import { flagLabel, isAdministerable, MEDICATION_FLAGS } from '../../shared/medication';
+import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
 
 type Tab = 'overview' | 'health' | 'school' | 'team' | 'records' | 'permissions';
 type PermResource = { code: string; name: string; group: string; actions: string[] };
@@ -36,6 +37,8 @@ export class ProfilePage {
   readonly otcCatalog = signal<any[]>([]);
   readonly medFilter = signal<'active' | 'inactive' | 'all'>('active');
   readonly editingMedId = signal<string | null>(null);
+  readonly photoError = signal<string | null>(null);
+  readonly photoAccept = PHOTO_ACCEPT;
   readonly medFlags = MEDICATION_FLAGS;
   readonly doseUnits = DOSE_UNITS;
   draft: any = {};
@@ -107,7 +110,9 @@ export class ProfilePage {
       profile: this.api.get<any>(`/households/${hid}/members/${id}/profile`),
       otc: this.api.get<any[]>(`/households/${hid}/otc-medications`).pipe(empty),
       logs: this.api.get<any[]>(`/households/${hid}/logs?member_id=${id}`).pipe(empty),
-      enrollments: this.api.get<any[]>(`/households/${hid}/enrollments?member_id=${id}`).pipe(empty),
+      enrollments: this.api
+        .get<any[]>(`/households/${hid}/enrollments?member_id=${id}`)
+        .pipe(empty),
       documents: this.api.get<any[]>(`/households/${hid}/documents?member_id=${id}`).pipe(empty),
       discipline: this.api.get<any[]>(`/households/${hid}/discipline?member_id=${id}`).pipe(empty),
     }).subscribe((bundle) => {
@@ -130,7 +135,9 @@ export class ProfilePage {
     const member = this.member();
     return (
       this.auth.isHouseholdAdmin() &&
-      Boolean(member?.email || member?.login_status === 'linked' || member?.login_status === 'pending')
+      Boolean(
+        member?.email || member?.login_status === 'linked' || member?.login_status === 'pending',
+      )
     );
   }
 
@@ -190,14 +197,13 @@ export class ProfilePage {
 
   add(collection: string, payload: any): void {
     const id = this.memberId();
-    const body =
-      collection === 'medications'
-        ? this.medPayload(payload)
-        : payload;
-    this.api.post(`/households/${this.api.hid()}/members/${id}/${collection}`, body).subscribe(() => {
-      this.resetDraft(collection);
-      this.reload(id);
-    });
+    const body = collection === 'medications' ? this.medPayload(payload) : payload;
+    this.api
+      .post(`/households/${this.api.hid()}/members/${id}/${collection}`, body)
+      .subscribe(() => {
+        this.resetDraft(collection);
+        this.reload(id);
+      });
   }
 
   saveMedication(): void {
@@ -260,7 +266,9 @@ export class ProfilePage {
 
   remove(collection: string, itemId: string): void {
     const id = this.memberId();
-    this.api.delete(`/households/${this.api.hid()}/members/${id}/${collection}/${itemId}`).subscribe(() => this.reload(id));
+    this.api
+      .delete(`/households/${this.api.hid()}/members/${id}/${collection}/${itemId}`)
+      .subscribe(() => this.reload(id));
   }
 
   availableOtc(): any[] {
@@ -295,13 +303,29 @@ export class ProfilePage {
     if (!file) {
       return;
     }
+    this.photoError.set(null);
     const id = this.memberId();
-    const form = new FormData();
-    form.append('file', file);
-    this.api.upload(`/households/${this.api.hid()}/members/${id}/photo`, form).subscribe(() => {
-      this.reload(id);
-      input.value = '';
-    });
+    void preparePhoto(file)
+      .then((photo) => {
+        const form = new FormData();
+        form.append('file', photo, photo.name);
+        this.api.upload(`/households/${this.api.hid()}/members/${id}/photo`, form).subscribe({
+          next: () => {
+            this.reload(id);
+            input.value = '';
+          },
+          error: (err: { error?: { detail?: unknown } }) => {
+            const detail = err.error?.detail;
+            this.photoError.set(
+              typeof detail === 'string' && detail.trim() ? detail : 'Could not upload that photo.',
+            );
+          },
+        });
+      })
+      .catch((err: unknown) => {
+        input.value = '';
+        this.photoError.set(err instanceof Error ? err.message : 'Could not read that photo.');
+      });
   }
 
   private resetDraft(collection: string): void {
@@ -324,7 +348,10 @@ export class ProfilePage {
     return {
       ...rest,
       dose: composeDose(dose_amount, dose_unit),
-      schedule_times: this.medTimes.split(',').map((item) => item.trim()).filter(Boolean),
+      schedule_times: this.medTimes
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean),
       start_date: payload.start_date || null,
       end_date: payload.end_date || null,
       hold_reason: payload.hold_reason || null,

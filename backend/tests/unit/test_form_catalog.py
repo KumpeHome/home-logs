@@ -67,6 +67,9 @@ def test_catalog_includes_required_home_and_foster_forms() -> None:
         "incident",
         "reasonable_prudent_parenting",
         "sibling_contact",
+        "journal_entry",
+        "personal_belonging",
+        "training",
     }:
         assert expected in codes
 
@@ -185,6 +188,54 @@ def test_case_worker_visit_accepts_multiple_children() -> None:
         },
     )
     assert errors == []
+
+
+def test_journal_entry_collects_date_time_and_incident() -> None:
+    form = get_form_type("journal_entry")
+    props = form.schema["properties"]
+    assert form.scope == "member"
+    assert props["date"]["format"] == "date"
+    assert props["time"]["format"] == "time"
+    assert props["incident"]["x-widget"] == "textarea"
+    for key in ("date", "time", "incident"):
+        assert key in form.schema["required"]
+    errors = validate_payload(
+        form.schema,
+        {
+            "date": "2026-08-19",
+            "time": "16:30:00",
+            "incident": "Small scrape on left knee after soccer.",
+        },
+    )
+    assert errors == []
+
+
+def test_incident_and_journal_accept_photos() -> None:
+    assert get_form_type("incident").allows_photos is True
+    assert get_form_type("journal_entry").allows_photos is True
+    assert get_form_type("fire_drill").allows_photos is False
+
+
+def test_personal_belonging_uses_official_inventory_categories() -> None:
+    form = get_form_type("personal_belonging")
+    props = form.schema["properties"]
+    assert form.scope == "member"
+    assert "Shoes" in props["item_category"]["enum"]
+    assert "Pairs of Socks" in props["item_category"]["enum"]
+    assert "Other" in props["item_category"]["enum"]
+    assert props["quantity"]["type"] == "integer"
+    for key in ("item_category", "quantity"):
+        assert key in form.schema["required"]
+
+
+def test_training_is_a_household_form() -> None:
+    form = get_form_type("training")
+    assert form.scope == "household"
+    assert form.category == "household"
+    props = form.schema["properties"]
+    assert props["date"]["format"] == "date"
+    assert "date" in form.schema["required"]
+    assert "topic" in form.schema["required"]
 
 
 def test_family_visit_accepts_multiple_children() -> None:

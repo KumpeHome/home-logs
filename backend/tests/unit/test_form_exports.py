@@ -24,12 +24,20 @@ def test_export_forms_lists_official_ar_dcfs_forms(client) -> None:
     assert codes == {
         "ar_dcfs_quarterly_drills",
         "ar_dcfs_medication_log",
+        "ar_dcfs_weekly_med_chart",
         "ar_dcfs_sibling_contact",
+        "ar_dcfs_journal_entries",
+        "ar_dcfs_personal_belonging",
+        "ar_dcfs_foster_home_log",
     }
     names = {item["name"] for item in rows}
     assert "Quarterly Fire/Tornado Drills" in names
     assert "Medication Dosage Logs" in names
+    assert "Weekly Medication Chart" in names
     assert "Separated Sibling Contact Report" in names
+    assert "Journal Entries" in names
+    assert "Personal Belonging Inventory Log" in names
+    assert "Foster Home Log" in names
     assert {item["category"] for item in rows} == {"Arkansas DCFS"}
     for item in rows:
         assert item["code"].startswith("ar_dcfs")
@@ -518,3 +526,357 @@ def test_export_rejects_unknown_form_code(client) -> None:
         },
     )
     assert response.status_code == 400
+
+
+def _med_child(client) -> tuple[str, str, str]:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    med_id = client.post(
+        f"/api/households/{household_id}/members/{child_id}/medications",
+        json={
+            "name": "Cetirizine",
+            "dose": "5mg",
+            "route": "oral",
+            "frequency": "daily",
+            "schedule_times": ["08:00"],
+        },
+    ).json()["id"]
+    return household_id, child_id, med_id
+
+
+def test_export_weekly_med_chart_groups_doses_by_week(client) -> None:
+    household_id, child_id, med_id = _med_child(client)
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 19, 13, 15, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "medication_name": "Cetirizine",
+                "quantity_given": 1,
+                "dose_given": "5mg",
+                "outcome": "given",
+                "fp_initials": "JK",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_weekly_med_chart",
+            "start_date": "2026-08-16",
+            "end_date": "2026-08-22",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    page = PdfReader(BytesIO(response.content)).pages[0]
+    assert float(page.mediabox.width) > float(page.mediabox.height)
+    text = _pdf_text(response.content)
+    assert "Weekly Medication Chart" in text
+    assert "CFS-372" in text
+    assert "03/2021" in text
+    assert "Sam Kid" in text
+    assert "Cetirizine" in text
+    assert "5mg" in text
+    assert "daily" in text
+    assert "SUNDAY" in text
+    assert "WEDNESDAY" in text
+    assert "8:15 AM" in text
+    assert "JK" in text
+
+
+def test_export_weekly_med_chart_embeds_drawn_initials(client) -> None:
+    household_id, child_id, med_id = _med_child(client)
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 19, 13, 15, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "medication_name": "Cetirizine",
+                "quantity_given": 1,
+                "dose_given": "5mg",
+                "outcome": "given",
+                "fp_initials": TINY_PNG,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_weekly_med_chart",
+            "start_date": "2026-08-16",
+            "end_date": "2026-08-22",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.content.startswith(b"%PDF")
+    assert b"/XObject" in response.content
+    assert "data:image" not in _pdf_text(response.content)
+
+
+def test_export_journal_entries_pdf_includes_child_and_incident(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Casey", "last_name": "Child"},
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "journal_entry",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 19, 21, 30, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "date": "2026-08-19",
+                "time": "16:30",
+                "incident": "Small scrape on left knee after soccer.",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_journal_entries",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Journal Entries" in text
+    assert "bruises, scrapes, cuts" in text
+    assert "Casey Child" in text
+    assert "Small scrape on left knee after soccer." in text
+    assert "2026-08-19" in text or "08-19-26" in text or "8/19" in text
+    assert "Date" in text
+    assert "Time" in text
+    assert "Incident" in text
+
+
+def test_export_journal_entries_paginates_after_eight_rows(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Casey", "last_name": "Child"},
+    ).json()["id"]
+    for index in range(9):
+        created = client.post(
+            f"/api/households/{household_id}/logs",
+            json={
+                "form_type_code": "journal_entry",
+                "subject_member_id": child_id,
+                "occurred_at": datetime(
+                    2026, 8, 1 + index, 21, 30, tzinfo=UTC
+                ).isoformat(),
+                "submit": True,
+                "payload": {
+                    "date": f"2026-08-{index + 1:02d}",
+                    "time": "16:30",
+                    "incident": f"Journal row {index + 1} unique note.",
+                },
+            },
+        )
+        assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_journal_entries",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    pages = PdfReader(BytesIO(response.content)).pages
+    assert len(pages) == 2
+    first = pages[0].extract_text() or ""
+    second = pages[1].extract_text() or ""
+    assert "Journal row 1 unique note." in first
+    assert "Journal row 8 unique note." in first
+    assert "Journal row 9 unique note." not in first
+    assert "Journal row 9 unique note." in second
+    assert "Casey Child" in second
+
+
+def test_export_personal_belonging_pdf_matches_cfs350(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "personal_belonging",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 19, 15, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "item_category": "Shoes",
+                "description": "Nike size 5",
+                "quantity": 1,
+                "recorded_on": "2026-08-19",
+                "initials": "JK",
+                "disposition": "",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_personal_belonging",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "CFS-350" in text
+    assert "01/2021" in text
+    assert "Division of Children and Family Services" in text
+    assert "Personal Belonging Inventory Log" in text
+    assert "Sam Kid" in text
+    assert "Shoes" in text
+    assert "Nike size 5" in text
+    assert "Pairs of Socks" in text
+
+
+def test_export_personal_belonging_overflow_shoes_go_to_next_page(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    for index in range(5):
+        created = client.post(
+            f"/api/households/{household_id}/logs",
+            json={
+                "form_type_code": "personal_belonging",
+                "subject_member_id": child_id,
+                "occurred_at": datetime(
+                    2026, 8, 1 + index, 15, 0, tzinfo=UTC
+                ).isoformat(),
+                "submit": True,
+                "payload": {
+                    "item_category": "Shoes",
+                    "description": f"Shoe pair {index + 1}",
+                    "quantity": 1,
+                    "recorded_on": f"2026-08-{index + 1:02d}",
+                    "initials": "JK",
+                },
+            },
+        )
+        assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_personal_belonging",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    pages = PdfReader(BytesIO(response.content)).pages
+    assert len(pages) == 2
+    first = pages[0].extract_text() or ""
+    second = pages[1].extract_text() or ""
+    assert "Shoe pair 1" in first
+    assert "Shoe pair 4" in first
+    assert "Shoe pair 5" not in first
+    assert "Shoe pair 5" in second
+    assert "CFS-350" in second
+
+
+def test_export_foster_home_log_summarizes_the_month(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Casey", "last_name": "Child"},
+    ).json()["id"]
+    training = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "training",
+            "occurred_at": datetime(2026, 8, 4, 18, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "date": "2026-08-04",
+                "topic": "CPR / First Aid",
+                "hours": "2",
+                "notes": "Agency in-service",
+            },
+        },
+    )
+    assert training.status_code == 201, training.text
+    drill = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "fire_drill",
+            "occurred_at": datetime(2026, 8, 19, 15, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "date": "2026-08-19",
+                "start_time": "10:00",
+                "end_time": "10:04",
+                "evacuation_seconds": "47",
+                "participants": [child_id],
+                "alarm_tested": True,
+            },
+        },
+    )
+    assert drill.status_code == 201, drill.text
+    visit = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "case_worker_visit",
+            "occurred_at": datetime(2026, 8, 21, 16, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "children_visited": [child_id],
+                "worker_name": "Lee Worker",
+                "visit_type": "home",
+                "topics": "School",
+            },
+        },
+    )
+    assert visit.status_code == 201, visit.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_foster_home_log",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "FOSTER HOME LOG" in text
+    assert "AUGUST" in text
+    assert "TRAINING" in text
+    assert "CPR / First Aid" in text
+    assert "FIRE DRILLS" in text
+    assert "Casey Child" in text
+    assert "47" in text
+    assert "WORKER VISITS" in text
+    assert "Lee Worker" in text
