@@ -15,6 +15,7 @@ class FormType:
     schema: dict
     export_paths: tuple[str, ...] = field(default_factory=tuple)
     allows_photos: bool = False
+    allows_certificates: bool = False
 
 
 def _string(title: str, **extra: object) -> dict:
@@ -773,6 +774,7 @@ TRAINING = FormType(
         ["date", "topic"],
     ),
     export_paths=("payload.date", "payload.topic", "payload.hours", "payload.notes"),
+    allows_certificates=True,
 )
 
 FORM_TYPES: tuple[FormType, ...] = (

@@ -9,10 +9,11 @@ import { AuthService } from '../../core/auth.service';
 import { InitialsPad } from '../../shared/initials-pad';
 import { flagLabel, isAdministerable } from '../../shared/medication';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
+import { DocumentInput } from '../../shared/document-input';
 
 @Component({
   selector: 'hl-logs',
-  imports: [DatePipe, FormsModule, FormRenderer, InitialsPad, RouterLink],
+  imports: [DatePipe, FormsModule, FormRenderer, InitialsPad, RouterLink, DocumentInput],
   template: `
     <header class="page-head">
       <div>
@@ -132,6 +133,15 @@ import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
               Photos stay with this record. They are not included on official reports.
             </p>
           }
+          @if (form.allows_certificates) {
+            <div class="field" data-test="log-certificate">
+              <span>Certificate</span>
+              <hl-document-input
+                hint="Upload a PDF or scan the paper certificate with the camera."
+                (fileChange)="onCertificate($event)"
+              />
+            </div>
+          }
           <hl-form-renderer [schema]="form.schema" [members]="members()" (saved)="save($event)" />
         }
       </section>
@@ -188,6 +198,7 @@ export class LogsPage {
   memberId = '';
   mar: any = this.emptyMar();
   photos: File[] = [];
+  certificate: File | null = null;
   readonly photoAccept = PHOTO_ACCEPT;
 
   constructor() {
@@ -213,6 +224,7 @@ export class LogsPage {
   start(): void {
     this.saveError.set(null);
     this.photos = [];
+    this.certificate = null;
     this.loadMembers();
     const form = this.forms().find((item) => item.code === this.formCode);
     this.selected.set(form);
@@ -246,6 +258,10 @@ export class LogsPage {
     }
   }
 
+  onCertificate(file: File | null): void {
+    this.certificate = file;
+  }
+
   save(payload: Record<string, unknown>, occurredAt?: string): void {
     this.saveError.set(null);
     if (this.selected()?.scope === 'member' && !this.memberId) {
@@ -270,7 +286,11 @@ export class LogsPage {
   }
 
   private afterSave(logId: string): void {
-    const uploads = this.photos.map((file) => {
+    const files = [...this.photos];
+    if (this.certificate) {
+      files.push(this.certificate);
+    }
+    const uploads = files.map((file) => {
       const form = new FormData();
       form.append('file', file, file.name);
       return this.api.upload(`/households/${this.api.hid()}/logs/${logId}/attachments`, form);
@@ -279,6 +299,7 @@ export class LogsPage {
     requests.subscribe({
       next: () => {
         this.photos = [];
+        this.certificate = null;
         this.refresh();
       },
       error: (err: { error?: { detail?: unknown } }) => {
@@ -286,7 +307,9 @@ export class LogsPage {
         this.saveError.set(
           typeof detail === 'string' && detail.trim()
             ? `Saved the record, but ${detail}`
-            : 'Saved the record, but photos could not be uploaded.',
+            : this.certificate
+              ? 'Saved the record, but the certificate could not be uploaded.'
+              : 'Saved the record, but photos could not be uploaded.',
         );
       },
     });

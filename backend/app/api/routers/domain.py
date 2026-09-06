@@ -65,6 +65,7 @@ from app.services.operations import (
     serialize_profile,
 )
 from app.services.otc import OtcService, serialize_assignment, serialize_otc
+from app.storage.documents import is_pdf
 from app.storage.files import LocalFileStore
 from app.storage.images import IMAGE_EXTENSIONS, normalize_image, sniff_image_media_type
 
@@ -579,7 +580,8 @@ def get_log_photo(
         data = LocalFileStore().read(attachment.storage_path)
     except FileNotFoundError as exc:
         raise DomainError("Photo not found", 404) from exc
-    return Response(content=data, media_type=sniff_image_media_type(data))
+    media_type = "application/pdf" if is_pdf(data) else sniff_image_media_type(data)
+    return Response(content=data, media_type=media_type)
 
 
 @logs_router.get("/households/{household_id}/logs/{log_id}/export")

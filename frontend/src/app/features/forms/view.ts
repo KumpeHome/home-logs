@@ -20,6 +20,7 @@ export class FormViewPage implements OnDestroy {
   readonly log = signal<any>(null);
   readonly fields = signal<SubmissionField[]>([]);
   readonly photos = signal<PhotoView[]>([]);
+  readonly files = signal<PhotoView[]>([]);
   readonly error = signal<string | null>(null);
   readonly exporting = signal(false);
 
@@ -45,7 +46,7 @@ export class FormViewPage implements OnDestroy {
   }
 
   ngOnDestroy(): void {
-    for (const photo of this.photos()) {
+    for (const photo of [...this.photos(), ...this.files()]) {
       URL.revokeObjectURL(photo.url);
     }
   }
@@ -80,6 +81,7 @@ export class FormViewPage implements OnDestroy {
     const entry = this.log();
     if (!entry || !attachments.length) {
       this.photos.set([]);
+      this.files.set([]);
       return;
     }
     forkJoin(
@@ -89,7 +91,8 @@ export class FormViewPage implements OnDestroy {
           .pipe(catchError(() => of(null))),
       ),
     ).subscribe((blobs) => {
-      const loaded: PhotoView[] = [];
+      const images: PhotoView[] = [];
+      const files: PhotoView[] = [];
       let failed = false;
       attachments.forEach((item, index) => {
         const blob = blobs[index];
@@ -97,11 +100,17 @@ export class FormViewPage implements OnDestroy {
           failed = true;
           return;
         }
-        loaded.push({ ...item, url: URL.createObjectURL(blob) });
+        const view = { ...item, url: URL.createObjectURL(blob) };
+        if (item.content_type.startsWith('image/')) {
+          images.push(view);
+        } else {
+          files.push(view);
+        }
       });
-      this.photos.set(loaded);
+      this.photos.set(images);
+      this.files.set(files);
       if (failed) {
-        this.error.set('One or more photos could not be loaded.');
+        this.error.set('One or more attachments could not be loaded.');
       }
     });
   }

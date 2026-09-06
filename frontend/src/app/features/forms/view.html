@@ -61,4 +61,18 @@
       </div>
     </section>
   }
+  @if (files().length) {
+    <section class="hl-card">
+      <h2>{{ entry.form_type_code === 'training' ? 'Certificate' : 'Files' }}</h2>
+      <ul class="file-list">
+        @for (file of files(); track file.id) {
+          <li>
+            <a class="hl-btn secondary" [href]="file.url" [download]="file.filename">{{
+              file.filename
+            }}</a>
+          </li>
+        }
+      </ul>
+    </section>
+  }
 }
