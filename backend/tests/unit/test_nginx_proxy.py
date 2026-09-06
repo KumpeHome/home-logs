@@ -60,3 +60,16 @@ def test_sync_secrets_workflow_declares_least_privilege_permissions() -> None:
     workflow = (ROOT / ".github" / "workflows" / "sync-secrets.yml").read_text()
     assert re.search(r"(?m)^permissions:\s*$", workflow)
     assert re.search(r"(?m)^\s+contents:\s+read\s*$", workflow)
+
+
+def test_prod_compose_bind_mounts_uploads_onto_host_network_drive() -> None:
+    compose_path = ROOT / ".kumpeapps-deploy-bot" / "prod" / "docker-compose.yml"
+    mappings = (ROOT / ".kumpeapps-deploy-bot" / "prod" / "prod.yml").read_text()
+    compose = compose_path.read_text()
+    assert "uploads_data:" not in compose
+    assert re.search(
+        r"\$\{UPLOADS_HOST_PATH:-/mnt/home-logs/uploads\}:/data/uploads",
+        compose,
+    )
+    assert "UPLOAD_DIR: /data/uploads" in compose
+    assert "UPLOADS_HOST_PATH: PROD_UPLOADS_HOST_PATH" in mappings
