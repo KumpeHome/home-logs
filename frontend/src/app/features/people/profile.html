@@ -653,6 +653,7 @@
   }
 
   @if (tab() === 'records') {
+    <hl-belonging-inventory [householdId]="api.hid()" [memberId]="memberId()" />
     <section class="hl-card">
       <div class="head">
         <h2>Logs</h2>
@@ -665,7 +666,7 @@
           <th>Status</th>
           <th></th>
         </tr>
-        @for (log of logs(); track log.id) {
+        @for (log of recordLogs(); track log.id) {
           <tr>
             <td>{{ log.occurred_at | date: 'short' : timezone() }}</td>
             <td>{{ log.form_name }}</td>

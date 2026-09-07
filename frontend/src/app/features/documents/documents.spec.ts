@@ -15,8 +15,19 @@ describe('DocumentsPage', () => {
           provide: ApiService,
           useValue: {
             hid: () => 'h1',
-            get: () => of([]),
+            get: () =>
+              of([
+                {
+                  id: 'd1',
+                  title: 'Court order',
+                  category: 'court',
+                  filename: 'order.pdf',
+                  content_type: 'application/pdf',
+                  created_at: '2026-09-04T12:00:00Z',
+                },
+              ]),
             upload: () => of({ id: 'd1' }),
+            getBlob: () => of(new Blob(['%PDF'], { type: 'application/pdf' })),
           },
         },
         { provide: PAPER_SCAN_ENGINE_LOADER, useValue: async () => ({}) },
