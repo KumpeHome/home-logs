@@ -251,6 +251,12 @@ _BELONGING_LAYOUT: tuple[tuple[str, int], ...] = (
     ("Other", 4),
 )
 
+_BELONGING_HEADER_ROW_HEIGHT = 36
+_BELONGING_BODY_ROW_HEIGHT = 14.5
+_BELONGING_INTRO_HEIGHT = 90
+_BELONGING_TOP_MARGIN = 0.4 * inch
+_BELONGING_BOTTOM_MARGIN = 0.5 * inch
+
 _BELONGING_TABLE_STYLE = TableStyle(
     [
         ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
@@ -269,15 +275,24 @@ _BELONGING_TABLE_STYLE = TableStyle(
 BelongingItem = tuple[str, str, str, str, str]
 
 
+def _fixed_belonging_body_rows() -> int:
+    return sum(slots for name, slots in _BELONGING_LAYOUT if name != "Other")
+
+
+def _max_other_slots(minimum: int) -> int:
+    frame = letter[1] - _BELONGING_TOP_MARGIN - _BELONGING_BOTTOM_MARGIN
+    budget = frame - _BELONGING_INTRO_HEIGHT - _BELONGING_HEADER_ROW_HEIGHT
+    max_body = int(budget // _BELONGING_BODY_ROW_HEIGHT)
+    return max(minimum, max_body - _fixed_belonging_body_rows())
+
+
+def _other_slot_count(item_count: int, minimum: int) -> int:
+    return max(minimum, min(item_count, _max_other_slots(minimum)))
+
+
 def _belonging_cell(category: str, index: int, item: BelongingItem | None) -> str:
     label = category if index == 0 and category else ""
     description = item[1] if item else ""
-    if category == "Other" and index == 0:
-        return (
-            "Other (list any other personal possessions such as makeup, "
-            "wallets, electronics, bedding): "
-            f"{description}"
-        ).rstrip()
     if label and description:
         return f"{label}: {description}"
     if label:
@@ -321,6 +336,8 @@ def _fill_belonging_page(
             data.append(["", "", "", ""])
             leftover.extend(rows)
             continue
+        if category == "Other":
+            slots = _other_slot_count(len(rows), slots)
         used = min(len(rows), max(slots, 1))
         for index in range(max(slots, 1)):
             item = rows[index] if index < len(rows) else None
@@ -345,8 +362,8 @@ def personal_belonging_pdf(
         pagesize=letter,
         leftMargin=0.5 * inch,
         rightMargin=0.5 * inch,
-        topMargin=0.4 * inch,
-        bottomMargin=0.5 * inch,
+        topMargin=_BELONGING_TOP_MARGIN,
+        bottomMargin=_BELONGING_BOTTOM_MARGIN,
     )
     styles = _styles()
     center = ParagraphStyle("Center", parent=styles["Normal"], alignment=1, fontSize=11)
@@ -377,7 +394,8 @@ def personal_belonging_pdf(
         table = Table(
             data,
             colWidths=[3.4 * inch, 0.85 * inch, 1.15 * inch, 1.8 * inch],
-            rowHeights=[36] + [14.5] * (len(data) - 1),
+            rowHeights=[_BELONGING_HEADER_ROW_HEIGHT]
+            + [_BELONGING_BODY_ROW_HEIGHT] * (len(data) - 1),
         )
         table.setStyle(_BELONGING_TABLE_STYLE)
         story.append(table)

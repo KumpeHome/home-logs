@@ -69,6 +69,33 @@ from app.storage.documents import is_pdf
 from app.storage.files import LocalFileStore
 from app.storage.images import IMAGE_EXTENSIONS, normalize_image, sniff_image_media_type
 
+
+def stored_file_response(
+    data: bytes, *, filename: str, content_type: str | None = None
+) -> Response:
+    if is_pdf(data):
+        media_type = "application/pdf"
+    else:
+        try:
+            media_type = sniff_image_media_type(data)
+        except DomainError:
+            media_type = content_type or "application/octet-stream"
+    safe_name = _safe_download_filename(filename)
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'inline; filename="{safe_name}"'},
+    )
+
+
+def _safe_download_filename(filename: str) -> str:
+    first_line = filename.splitlines()[0] if filename else ""
+    cleaned = "".join(char for char in first_line if char.isprintable()).replace(
+        '"', ""
+    )
+    return cleaned or "download"
+
+
 members_router = APIRouter()
 logs_router = APIRouter()
 more_router = APIRouter()
@@ -580,8 +607,9 @@ def get_log_photo(
         data = LocalFileStore().read(attachment.storage_path)
     except FileNotFoundError as exc:
         raise DomainError("Photo not found", 404) from exc
-    media_type = "application/pdf" if is_pdf(data) else sniff_image_media_type(data)
-    return Response(content=data, media_type=media_type)
+    return stored_file_response(
+        data, filename=attachment.filename, content_type=attachment.content_type
+    )
 
 
 @logs_router.get("/households/{household_id}/logs/{log_id}/export")
@@ -815,6 +843,27 @@ async def add_report_card(
     return {"id": card.id}
 
 
+@more_router.get(
+    "/households/{household_id}/enrollments/{enrollment_id}/report-cards/{card_id}"
+)
+def get_report_card(
+    household_id: str,
+    enrollment_id: str,
+    card_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(EDUCATION_READ))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    service.require_membership(household_id, user)
+    PermissionService(db).require(household_id, user, "tab.school", "view")
+    card = EducationService(db).get_report_card(household_id, enrollment_id, card_id)
+    try:
+        data = LocalFileStore().read(card.storage_path)
+    except FileNotFoundError as exc:
+        raise DomainError("Report card not found", 404) from exc
+    return stored_file_response(data, filename=card.filename)
+
+
 @more_router.post("/households/{household_id}/documents", status_code=201)
 async def add_document(
     household_id: str,
@@ -867,3 +916,23 @@ def list_documents(
         }
         for item in DocumentService(db).list(household_id, member_id)
     ]
+
+
+@more_router.get("/households/{household_id}/documents/{document_id}")
+def get_document(
+    household_id: str,
+    document_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(DOCUMENTS_READ))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> Response:
+    service.require_membership(household_id, user)
+    PermissionService(db).require(household_id, user, "tab.documents", "view")
+    doc = DocumentService(db).get(household_id, document_id)
+    try:
+        data = LocalFileStore().read(doc.storage_path)
+    except FileNotFoundError as exc:
+        raise DomainError("Document not found", 404) from exc
+    return stored_file_response(
+        data, filename=doc.filename, content_type=doc.content_type
+    )

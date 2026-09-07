@@ -9,13 +9,14 @@ import { MemberPhoto } from '../../shared/member-photo';
 import { composeDose, DOSE_UNITS, parseDose } from '../../shared/dose';
 import { flagLabel, isAdministerable, MEDICATION_FLAGS } from '../../shared/medication';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
+import { BelongingInventory } from './belonging-inventory';
 
 type Tab = 'overview' | 'health' | 'school' | 'team' | 'records' | 'permissions';
 type PermResource = { code: string; name: string; group: string; actions: string[] };
 
 @Component({
   selector: 'hl-profile',
-  imports: [FormsModule, MemberPhoto, RouterLink, DatePipe],
+  imports: [FormsModule, MemberPhoto, RouterLink, DatePipe, BelongingInventory],
   templateUrl: './profile.html',
   styleUrl: './profile.scss',
 })
@@ -129,6 +130,10 @@ export class ProfilePage {
       this.editingMedId.set(null);
       this.loadPermissions(id);
     });
+  }
+
+  recordLogs(): any[] {
+    return this.logs().filter((log) => log.form_type_code !== 'personal_belonging');
   }
 
   canManagePermissions(): boolean {

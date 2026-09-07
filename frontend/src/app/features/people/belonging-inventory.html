@@ -1,0 +1,82 @@
+<section class="hl-card" data-test="belonging-inventory">
+  <div class="head">
+    <h2>Personal belonging inventory</h2>
+    <button class="hl-btn secondary" type="button" data-test="add-belonging" (click)="startAdd()">
+      Add item
+    </button>
+  </div>
+  <p class="muted">Clothing and personal items for this person, used on the CFS-350 inventory.</p>
+  @if (error(); as message) {
+    <p class="error">{{ message }}</p>
+  }
+  <table>
+    <tr>
+      <th>Item</th>
+      <th>Qty</th>
+      <th>Description</th>
+      <th>Date</th>
+      <th>Disposition</th>
+      <th></th>
+    </tr>
+    @for (item of items(); track item.id) {
+      <tr>
+        <td>{{ item.payload.item_category }}</td>
+        <td>{{ item.payload.quantity }}</td>
+        <td>{{ item.payload.description }}</td>
+        <td>{{ item.payload.recorded_on }}</td>
+        <td>{{ item.payload.disposition }}</td>
+        <td>
+          <button
+            class="hl-btn secondary"
+            type="button"
+            data-test="edit-belonging"
+            (click)="startEdit(item)"
+          >
+            Edit
+          </button>
+        </td>
+      </tr>
+    } @empty {
+      <tr>
+        <td colspan="6" class="muted">No belongings recorded yet.</td>
+      </tr>
+    }
+  </table>
+  @if (editing()) {
+    <form class="hl-form" data-test="belonging-form" (ngSubmit)="save()">
+      <label
+        >Item
+        <select [(ngModel)]="draft.item_category" name="bcat" data-test="belonging-category">
+          @for (category of categories(); track category) {
+            <option [value]="category">{{ category }}</option>
+          }
+        </select>
+      </label>
+      <label
+        >Quantity
+        <input
+          type="number"
+          min="0"
+          step="1"
+          [(ngModel)]="draft.quantity"
+          name="bqty"
+          data-test="belonging-quantity"
+        />
+      </label>
+      <label
+        >Description / size / condition
+        <input [(ngModel)]="draft.description" name="bdesc" />
+      </label>
+      <label>Date <input type="date" [(ngModel)]="draft.recorded_on" name="bdate" /></label>
+      <label>Initials <input [(ngModel)]="draft.initials" name="binit" /></label>
+      <label
+        >Disposition
+        <input [(ngModel)]="draft.disposition" name="bdisp" />
+      </label>
+      <div class="actions">
+        <button class="hl-btn" type="submit" data-test="save-belonging">Save item</button>
+        <button class="hl-btn ghost" type="button" (click)="cancel()">Cancel</button>
+      </div>
+    </form>
+  }
+</section>

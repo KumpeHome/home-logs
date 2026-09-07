@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
 from pypdf import PdfReader
@@ -758,6 +758,143 @@ def test_export_personal_belonging_pdf_matches_cfs350(client) -> None:
     assert "Shoes" in text
     assert "Nike size 5" in text
     assert "Pairs of Socks" in text
+
+
+def test_export_personal_belonging_other_row_uses_short_label(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "personal_belonging",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 9, 4, 15, 0, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "item_category": "Other",
+                "description": "Black pillow case",
+                "quantity": 1,
+                "recorded_on": "2026-09-04",
+                "initials": "JK",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_personal_belonging",
+            "start_date": "2026-09-01",
+            "end_date": "2026-09-30",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Other" in text
+    assert "Black pillow case" in text
+    assert "list any other personal possessions" not in text
+    assert "makeup" not in text
+
+
+def _child(client, household_id: str) -> str:
+    return client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+
+
+def _add_belonging(
+    client,
+    household_id: str,
+    child_id: str,
+    *,
+    category: str,
+    description: str,
+    index: int,
+) -> None:
+    occurred = datetime(2026, 8, 1, 15, 0, tzinfo=UTC) + timedelta(minutes=index)
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "personal_belonging",
+            "subject_member_id": child_id,
+            "occurred_at": occurred.isoformat(),
+            "submit": True,
+            "payload": {
+                "item_category": category,
+                "description": description,
+                "quantity": 1,
+                "recorded_on": occurred.date().isoformat(),
+                "initials": "JK",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+
+
+def _export_belonging(client, household_id: str, child_id: str):
+    return client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_personal_belonging",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+
+
+def test_export_personal_belonging_other_items_fill_first_page(client) -> None:
+    household_id = _household(client)
+    child_id = _child(client, household_id)
+    for index in range(8):
+        _add_belonging(
+            client,
+            household_id,
+            child_id,
+            category="Other",
+            description=f"Other item {index + 1}",
+            index=index,
+        )
+    response = _export_belonging(client, household_id, child_id)
+    assert response.status_code == 200, response.text
+    pages = PdfReader(BytesIO(response.content)).pages
+    assert len(pages) == 1
+    text = pages[0].extract_text() or ""
+    for index in range(8):
+        assert f"Other item {index + 1}" in text
+
+
+def test_export_personal_belonging_other_overflows_after_page_is_full(client) -> None:
+    household_id = _household(client)
+    child_id = _child(client, household_id)
+    total = 40
+    for index in range(total):
+        _add_belonging(
+            client,
+            household_id,
+            child_id,
+            category="Other",
+            description=f"Packed item {index + 1}",
+            index=index,
+        )
+    response = _export_belonging(client, household_id, child_id)
+    assert response.status_code == 200, response.text
+    pages = PdfReader(BytesIO(response.content)).pages
+    assert len(pages) >= 2
+    first = pages[0].extract_text() or ""
+    rest = "".join(page.extract_text() or "" for page in pages[1:])
+    first_count = sum(
+        1 for index in range(total) if f"Packed item {index + 1}" in first
+    )
+    assert first_count > 4
+    assert "Packed item 1" in first
+    assert f"Packed item {total}" not in first
+    assert f"Packed item {total}" in rest
 
 
 def test_export_personal_belonging_overflow_shoes_go_to_next_page(client) -> None:

@@ -71,7 +71,14 @@ const PROFILE = {
     },
   ],
   otc_medications: [
-    { id: 'as1', otc_medication_id: 'o2', name: 'Ibuprofen', dose: '200mg', route: 'oral', is_otc: true },
+    {
+      id: 'as1',
+      otc_medication_id: 'o2',
+      name: 'Ibuprofen',
+      dose: '200mg',
+      route: 'oral',
+      is_otc: true,
+    },
   ],
   diagnoses: [],
   disabilities: [],
@@ -106,12 +113,53 @@ const apiMock = {
         { id: 'o2', name: 'Ibuprofen', dose: '200mg', route: 'oral' },
       ]);
     }
+    if (path.includes('/documents')) {
+      return of([
+        {
+          id: 'd1',
+          title: 'IEP',
+          category: 'school',
+          filename: 'iep.pdf',
+          content_type: 'application/pdf',
+        },
+      ]);
+    }
+    if (path === '/form-types') {
+      return of([
+        {
+          code: 'personal_belonging',
+          schema: {
+            properties: {
+              item_category: { enum: ['Shoes', 'Other'] },
+            },
+          },
+        },
+      ]);
+    }
+    if (path.includes('form_type_code=personal_belonging')) {
+      return of([
+        {
+          id: 'b1',
+          form_type_code: 'personal_belonging',
+          status: 'submitted',
+          payload: {
+            item_category: 'Shoes',
+            description: 'Nike size 5',
+            quantity: 1,
+            recorded_on: '2026-08-19',
+            initials: 'JK',
+            disposition: '',
+          },
+        },
+      ]);
+    }
     return of([]);
   },
   post: () => of({}),
   patch: () => of(PROFILE),
   delete: () => of(undefined),
   upload: () => of(PROFILE),
+  getBlob: () => of(new Blob(['%PDF'], { type: 'application/pdf' })),
 };
 
 describe('ProfilePage', () => {
@@ -141,9 +189,9 @@ describe('ProfilePage', () => {
     expect(text).toContain('she/her');
     expect(text).toContain('SoonerCare');
     expect(text).not.toContain('Add medication');
-    expect(fixture.nativeElement.querySelector('[data-test="edit-overview"]')?.textContent).toContain(
-      'Edit',
-    );
+    expect(
+      fixture.nativeElement.querySelector('[data-test="edit-overview"]')?.textContent,
+    ).toContain('Edit');
   });
 
   it('reveals an add form when Add is clicked on a health section', async () => {
@@ -228,6 +276,25 @@ describe('ProfilePage', () => {
     expect(host.querySelector('[data-test="med-dose-unit"]')).toBeTruthy();
     expect(host.querySelector('input[name="mdose"]')).toBeNull();
   });
+
+  it('lets you view and edit personal belongings on the records tab', async () => {
+    const fixture = TestBed.createComponent(ProfilePage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const records = Array.from(host.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Records'),
+    );
+    records?.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(host.textContent).toContain('Personal belonging inventory');
+    expect(host.textContent).toContain('Nike size 5');
+    expect(host.querySelector('[data-test="add-belonging"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="edit-belonging"]')).toBeTruthy();
+  });
 });
 
 describe('ProfilePage permissions', () => {
@@ -248,7 +315,12 @@ describe('ProfilePage permissions', () => {
             get: (path: string) => {
               if (path === '/permission-catalog') {
                 return of([
-                  { code: 'tab.school', name: 'School', group: 'tab', actions: ['view', 'add', 'edit'] },
+                  {
+                    code: 'tab.school',
+                    name: 'School',
+                    group: 'tab',
+                    actions: ['view', 'add', 'edit'],
+                  },
                   {
                     code: 'form.sibling_contact',
                     name: 'Sibling Contact',
@@ -324,7 +396,9 @@ describe('ProfilePage permissions', () => {
     expect(host.textContent).toContain('School');
     expect(host.textContent).toContain('Sibling Contact');
     expect(host.querySelector('[data-test="perm-tab.school-view"]')).toBeTruthy();
-    const addBox = host.querySelector('[data-test="perm-form.sibling_contact-add"]') as HTMLInputElement;
+    const addBox = host.querySelector(
+      '[data-test="perm-form.sibling_contact-add"]',
+    ) as HTMLInputElement;
     expect(addBox).toBeTruthy();
     addBox.click();
     fixture.detectChanges();

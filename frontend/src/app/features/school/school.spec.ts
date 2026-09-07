@@ -26,7 +26,9 @@ describe('SchoolPage report cards', () => {
                     iep: false,
                     plan_504: false,
                     grades: [],
-                    report_cards: [],
+                    report_cards: [
+                      { id: 'rc1', term: 'Q1', filename: 'card.pdf', issued_on: null, notes: null },
+                    ],
                   },
                 ]);
               }
@@ -34,6 +36,7 @@ describe('SchoolPage report cards', () => {
             },
             post: () => of({}),
             upload: () => of({}),
+            getBlob: () => of(new Blob(['%PDF'], { type: 'application/pdf' })),
           },
         },
         { provide: PAPER_SCAN_ENGINE_LOADER, useValue: async () => ({}) },

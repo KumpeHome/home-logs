@@ -798,6 +798,17 @@ class EducationService:
         )
         return card
 
+    def get_report_card(
+        self, household_id: str, enrollment_id: str, card_id: str
+    ) -> ReportCard:
+        enrollment = self.db.get(SchoolEnrollment, enrollment_id)
+        if enrollment is None or enrollment.household_id != household_id:
+            raise DomainError("Enrollment not found", 404)
+        card = self.db.get(ReportCard, card_id)
+        if card is None or card.enrollment_id != enrollment.id:
+            raise DomainError("Report card not found", 404)
+        return card
+
 
 class DocumentService:
     def __init__(self, db: Session, files: LocalFileStore | None = None) -> None:
@@ -840,6 +851,12 @@ class DocumentService:
             entity_id=doc.id,
             summary=title,
         )
+        return doc
+
+    def get(self, household_id: str, document_id: str) -> Document:
+        doc = self.db.get(Document, document_id)
+        if doc is None or doc.household_id != household_id:
+            raise DomainError("Document not found", 404)
         return doc
 
     def list(self, household_id: str, member_id: str | None = None) -> list[Document]:
