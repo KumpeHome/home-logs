@@ -44,6 +44,11 @@ const apiMock = {
         otc_medications: [],
       });
     }
+    if (path.includes('/otc-medications')) {
+      return of([
+        { id: 'otc1', name: 'Acetaminophen', dose: '325mg', active: true },
+      ]);
+    }
     if (path.includes('/members')) {
       return of([{ id: 'm1', legal_name: 'Casey Child' }]);
     }
@@ -78,6 +83,8 @@ describe('LogsPage medication administration', () => {
     const host = fixture.nativeElement as HTMLElement;
     expect(host.textContent).toContain('Cetirizine');
     expect(host.textContent).not.toContain('Old Antibiotic');
+    expect(host.textContent).toContain('Acetaminophen');
+    expect(host.textContent).toContain('(OTC)');
     expect(host.querySelector('[data-test="med-flags"]')?.textContent).toContain('Drowsy');
     expect(host.querySelector('[data-test="med-flags"]')?.textContent).toContain('Take with food');
   });

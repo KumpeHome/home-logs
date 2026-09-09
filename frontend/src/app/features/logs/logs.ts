@@ -7,7 +7,7 @@ import { FormRenderer } from '../../shared/form-renderer';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { InitialsPad } from '../../shared/initials-pad';
-import { flagLabel, isAdministerable } from '../../shared/medication';
+import { administerableChoices, flagLabel, type AdministerableMed } from '../../shared/medication';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
 import { DocumentInput } from '../../shared/document-input';
 
@@ -230,17 +230,21 @@ export class LogsPage {
     this.selected.set(form);
     if (form?.code === 'medication_administration') {
       this.mar = this.emptyMar();
-    }
-    if (this.memberId) {
-      this.api
-        .get<any>(`/households/${this.api.hid()}/members/${this.memberId}/profile`)
-        .subscribe((profile) => {
-          const rows = [...(profile.medications ?? []), ...(profile.otc_medications ?? [])].filter(
-            (item) => isAdministerable(item),
-          );
+      this.meds.set([]);
+      if (this.memberId) {
+        const householdId = this.api.hid();
+        forkJoin({
+          profile: this.api.get<{
+            medications?: AdministerableMed[];
+            otc_medications?: AdministerableMed[];
+          }>(`/households/${householdId}/members/${this.memberId}/profile`),
+          catalog: this.api.get<AdministerableMed[]>(`/households/${householdId}/otc-medications`),
+        }).subscribe(({ profile, catalog }) => {
+          const rows = administerableChoices(profile, catalog);
           this.meds.set(rows);
           this.mar.medication_id = rows[0]?.id ?? '';
         });
+      }
     }
   }
 

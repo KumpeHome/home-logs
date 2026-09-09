@@ -20,6 +20,18 @@ export function flagLabel(code: string): string {
   return MEDICATION_FLAGS.find((item) => item.code === code)?.label ?? code;
 }
 
+export type AdministerableMed = {
+  id: string;
+  name: string;
+  dose?: string;
+  active?: boolean;
+  start_date?: string | null;
+  end_date?: string | null;
+  flags?: string[];
+  is_otc?: boolean;
+  otc_medication_id?: string;
+};
+
 export function isAdministerable(
   med: {
     active?: boolean;
@@ -38,6 +50,23 @@ export function isAdministerable(
     return false;
   }
   return true;
+}
+
+export function administerableChoices(
+  profile: {
+    medications?: AdministerableMed[];
+    otc_medications?: AdministerableMed[];
+  },
+  catalog: AdministerableMed[] = [],
+  on: string = todayIso(),
+): AdministerableMed[] {
+  const prescribed = (profile.medications ?? []).filter((item) => isAdministerable(item, on));
+  const assigned = (profile.otc_medications ?? []).filter((item) => isAdministerable(item, on));
+  const assignedIds = new Set(assigned.map((item) => item.otc_medication_id));
+  const household = catalog
+    .filter((item) => item.active !== false && !assignedIds.has(item.id))
+    .map((item) => ({ ...item, is_otc: true }));
+  return [...prescribed, ...assigned, ...household];
 }
 
 function todayIso(): string {

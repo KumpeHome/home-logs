@@ -221,6 +221,17 @@ def _assigned_otc(
     )
 
 
+def _catalog_otc(
+    db: Session, household_id: str, medication_id: str
+) -> tuple[str, str, str, bool] | None:
+    otc = db.get(HouseholdOtcMedication, medication_id)
+    if otc is None or otc.household_id != household_id:
+        return None
+    if not otc.active:
+        raise DomainError("Medication is not active")
+    return otc.name, otc.dose, otc.route, False
+
+
 def resolve_administered_medication(
     db: Session,
     household_id: str,
@@ -228,12 +239,14 @@ def resolve_administered_medication(
     medication_id: str | None,
     on: date | None = None,
 ) -> tuple[str, str, str, bool]:
-    """Return name, dose, route, is_psychotropic for a profile med or OTC assignment."""
+    """Return name, dose, route, is_psychotropic for a profile med or household OTC."""
     if not medication_id or profile is None:
         raise DomainError("Select a medication from this member's profile")
     when = on or date.today()
-    resolved = _profile_medication(db, profile, medication_id, when) or _assigned_otc(
-        db, household_id, profile, medication_id, when
+    resolved = (
+        _profile_medication(db, profile, medication_id, when)
+        or _assigned_otc(db, household_id, profile, medication_id, when)
+        or _catalog_otc(db, household_id, medication_id)
     )
     if resolved is None:
         raise DomainError("Select a medication from this member's profile")
