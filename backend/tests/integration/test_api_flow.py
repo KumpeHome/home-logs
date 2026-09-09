@@ -334,6 +334,45 @@ def test_household_otc_catalog_assignable_to_member(client) -> None:
     assert duplicate.status_code == 400
 
 
+def test_log_medication_accepts_household_otc_without_assignment(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    otc_id = client.post(
+        f"/api/households/{household_id}/otc-medications",
+        json={
+            "name": "Ibuprofen",
+            "dose": "200mg",
+            "route": "oral",
+            "instructions": "As needed for pain",
+        },
+    ).json()["id"]
+
+    log = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": member_id,
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": otc_id,
+                "medication_name": "Ibuprofen",
+                "quantity_given": 1,
+                "dose_given": "200mg",
+                "outcome": "given",
+            },
+        },
+    )
+    assert log.status_code == 201, log.text
+    assert log.json()["payload"]["medication_name"] == "Ibuprofen"
+    assert log.json()["payload"]["dose_given"] == "200mg"
+
+
 def test_update_medication_flags_dates_and_reject_expired_mar(client) -> None:
     household_id = client.post(
         "/api/households", json={"name": "Home", "household_type": "family"}
