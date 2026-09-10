@@ -174,7 +174,7 @@ export class AuthService {
     writeStore('session', TOKEN_KEY, null);
     this.token.set(null);
     this.me.set(null);
-    void this.router.navigateByUrl('/login');
+    void this.router.navigateByUrl('/login', { replaceUrl: true });
   }
 
   selectHousehold(id: string): void {
