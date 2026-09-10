@@ -334,6 +334,34 @@ def test_household_otc_catalog_assignable_to_member(client) -> None:
     assert duplicate.status_code == 400
 
 
+def test_update_household_otc_medication(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/otc-medications",
+        json={
+            "name": "Melatonin",
+            "dose": "1tablet",
+            "route": "oral",
+            "instructions": "At bedtime",
+        },
+    )
+    assert created.status_code == 201, created.text
+    otc_id = created.json()["id"]
+    updated = client.patch(
+        f"/api/households/{household_id}/otc-medications/{otc_id}",
+        json={"name": "Melatonin gummy", "dose": "1gummy"},
+    )
+    assert updated.status_code == 200, updated.text
+    assert updated.json()["name"] == "Melatonin gummy"
+    assert updated.json()["dose"] == "1gummy"
+    catalog = client.get(f"/api/households/{household_id}/otc-medications").json()
+    item = next(row for row in catalog if row["id"] == otc_id)
+    assert item["name"] == "Melatonin gummy"
+    assert item["dose"] == "1gummy"
+
+
 def test_log_medication_accepts_household_otc_without_assignment(client) -> None:
     household_id = client.post(
         "/api/households", json={"name": "Home", "household_type": "family"}

@@ -64,9 +64,7 @@ describe('FormRenderer', () => {
     ]);
     fixture.detectChanges();
     await fixture.whenStable();
-    const select = fixture.nativeElement.querySelector(
-      'select[multiple]',
-    ) as HTMLSelectElement;
+    const select = fixture.nativeElement.querySelector('select[multiple]') as HTMLSelectElement;
     expect(select).toBeTruthy();
     expect(fixture.nativeElement.querySelector('input[type="text"]')).toBeNull();
     const labels = Array.from(select.options).map((option) => option.textContent?.trim());
@@ -118,5 +116,20 @@ describe('FormRenderer', () => {
     expect(saved[0]['evacuation_seconds']).toBe(47);
     expect(saved[0]['attendees']).toEqual(['Ada', 'Casey']);
     expect(saved[0]['overnight']).toBe(false);
+  });
+
+  it('disables save while busy and can reset the filled-in values', async () => {
+    fixture.detectChanges();
+    const renderer = fixture.componentInstance;
+    renderer.model['meeting_point'] = 'Front porch';
+    fixture.componentRef.setInput('busy', true);
+    fixture.detectChanges();
+    const button = fixture.nativeElement.querySelector(
+      '[data-test="save-record"]',
+    ) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.textContent).toContain('Saving');
+    renderer.reset();
+    expect(renderer.model['meeting_point']).toBeUndefined();
   });
 });

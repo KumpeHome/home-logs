@@ -60,7 +60,9 @@ export interface FormMember {
                   <option [value]="member.id">{{ member.legal_name }}</option>
                 }
               </select>
-              <span class="muted">Select one or more household members. Hold Ctrl or Cmd to choose multiple.</span>
+              <span class="muted"
+                >Select one or more household members. Hold Ctrl or Cmd to choose multiple.</span
+              >
             }
             @case ('child-multiselect') {
               <select
@@ -73,7 +75,9 @@ export interface FormMember {
                   <option [value]="child.id">{{ child.legal_name }}</option>
                 }
               </select>
-              <span class="muted">Select one or more children. Hold Ctrl or Cmd to choose multiple.</span>
+              <span class="muted"
+                >Select one or more children. Hold Ctrl or Cmd to choose multiple.</span
+              >
             }
             @default {
               <input [type]="field.widget" [(ngModel)]="model[field.key]" [name]="field.key" />
@@ -81,13 +85,22 @@ export interface FormMember {
           }
         </label>
       }
-      <button class="hl-btn" type="button" (click)="emitSave()">Save record</button>
+      <button
+        class="hl-btn"
+        type="button"
+        data-test="save-record"
+        [disabled]="busy()"
+        (click)="emitSave()"
+      >
+        {{ busy() ? 'Saving…' : 'Save record' }}
+      </button>
     </div>
   `,
 })
 export class FormRenderer {
   readonly schema = input.required<Record<string, unknown>>();
   readonly members = input<FormMember[]>([]);
+  readonly busy = input(false);
   readonly saved = output<Record<string, unknown>>();
   model: Record<string, unknown> = {};
 
@@ -134,6 +147,9 @@ export class FormRenderer {
   }
 
   emitSave(): void {
+    if (this.busy()) {
+      return;
+    }
     const payload: Record<string, unknown> = {};
     for (const field of this.fields()) {
       const value = this.coercedValue(field);
@@ -144,11 +160,11 @@ export class FormRenderer {
     this.saved.emit(payload);
   }
 
-  private coercedValue(field: {
-    key: string;
-    widget: string;
-    type?: string;
-  }): unknown {
+  reset(): void {
+    this.model = {};
+  }
+
+  private coercedValue(field: { key: string; widget: string; type?: string }): unknown {
     const value = this.model[field.key];
     if (field.widget === 'number' || field.type === 'integer') {
       if (value === '' || value === null || value === undefined) {
@@ -165,7 +181,10 @@ export class FormRenderer {
         return value;
       }
       if (typeof value === 'string') {
-        return value.split(',').map((item) => item.trim()).filter(Boolean);
+        return value
+          .split(',')
+          .map((item) => item.trim())
+          .filter(Boolean);
       }
       return [];
     }

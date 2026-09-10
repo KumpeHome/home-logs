@@ -7,6 +7,7 @@ export const DOSE_UNITS = [
   'units',
   'tablet',
   'capsule',
+  'gummy',
   'drop',
   'puff',
 ] as const;
@@ -22,7 +23,10 @@ function trimAmount(value: number): string {
   return String(Number(value.toPrecision(12)));
 }
 
-export function parseDose(value: string | null | undefined): { amount: string | null; unit: string } {
+export function parseDose(value: string | null | undefined): {
+  amount: string | null;
+  unit: string;
+} {
   const text = (value ?? '').trim();
   if (!text) {
     return { amount: null, unit: 'mg' };
@@ -34,7 +38,10 @@ export function parseDose(value: string | null | undefined): { amount: string | 
   return { amount: trimAmount(Number(match[1])), unit: match[2] || 'mg' };
 }
 
-export function composeDose(amount: string | number | null | undefined, unit: string | null | undefined): string {
+export function composeDose(
+  amount: string | number | null | undefined,
+  unit: string | null | undefined,
+): string {
   const text = String(amount ?? '').trim();
   if (!text) {
     return '';
@@ -45,7 +52,10 @@ export function composeDose(amount: string | number | null | undefined, unit: st
   return `${trimmed}${suffix}`;
 }
 
-export function administeredDose(unitDose: string | null | undefined, quantity: number | string | null | undefined): string {
+export function administeredDose(
+  unitDose: string | null | undefined,
+  quantity: number | string | null | undefined,
+): string {
   const parsed = parseDose(unitDose);
   if (parsed.amount === null) {
     return (unitDose ?? '').trim();

@@ -155,8 +155,8 @@ const apiMock = {
     }
     return of([]);
   },
-  post: () => of({}),
-  patch: () => of(PROFILE),
+  post: vi.fn(() => of({})),
+  patch: vi.fn(() => of(PROFILE)),
   delete: () => of(undefined),
   upload: () => of(PROFILE),
   getBlob: () => of(new Blob(['%PDF'], { type: 'application/pdf' })),
@@ -164,6 +164,8 @@ const apiMock = {
 
 describe('ProfilePage', () => {
   beforeEach(async () => {
+    apiMock.patch.mockClear();
+    apiMock.post.mockClear();
     await TestBed.configureTestingModule({
       imports: [ProfilePage],
       providers: [
@@ -257,6 +259,25 @@ describe('ProfilePage', () => {
     expect(host.querySelector('[data-test="edit-medications-form"]')).toBeTruthy();
     expect(host.querySelector('[data-test="med-start-date"]')).toBeTruthy();
     expect(host.querySelector('[data-test="med-end-date"]')).toBeTruthy();
+    const page = fixture.componentInstance;
+    expect(page.med.name).toBe('Old Antibiotic');
+    page.med.name = 'Amoxicillin';
+    page.med.dose_unit = 'gummy';
+    (
+      host.querySelector('[data-test="edit-medications-form"] button.hl-btn') as HTMLButtonElement
+    ).click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const call = (
+      apiMock.patch.mock.calls as unknown as [string, { name: string; dose: string }][]
+    ).find(([path]) => path.includes('/medications/med2'));
+    expect(call).toBeTruthy();
+    expect(call?.[1]).toEqual(expect.objectContaining({ name: 'Amoxicillin', dose: '400gummy' }));
+    expect(page.med.name).toBe('');
+    expect(page.adding()).toBeNull();
+    expect(host.querySelector('[data-test="edit-medications-form"]')).toBeNull();
+    expect(host.querySelector('[data-test="form-success"]')?.textContent).toContain('saved');
   });
 
   it('asks for a dose amount and unit instead of a single dose string', async () => {
@@ -275,6 +296,10 @@ describe('ProfilePage', () => {
     expect(host.querySelector('[data-test="med-dose-amount"]')).toBeTruthy();
     expect(host.querySelector('[data-test="med-dose-unit"]')).toBeTruthy();
     expect(host.querySelector('input[name="mdose"]')).toBeNull();
+    const units = Array.from(host.querySelectorAll('[data-test="med-dose-unit"] option')).map(
+      (option) => option.textContent?.trim(),
+    );
+    expect(units).toContain('gummy');
   });
 
   it('lets you view and edit personal belongings on the records tab', async () => {

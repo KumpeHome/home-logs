@@ -1,7 +1,7 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
 import { provideRouter } from '@angular/router';
-import { of, throwError } from 'rxjs';
+import { of, Subject, throwError } from 'rxjs';
 import { ApiService } from '../../core/api.service';
 import { LogsPage } from './logs';
 
@@ -45,9 +45,7 @@ const apiMock = {
       });
     }
     if (path.includes('/otc-medications')) {
-      return of([
-        { id: 'otc1', name: 'Acetaminophen', dose: '325mg', active: true },
-      ]);
+      return of([{ id: 'otc1', name: 'Acetaminophen', dose: '325mg', active: true }]);
     }
     if (path.includes('/members')) {
       return of([{ id: 'm1', legal_name: 'Casey Child' }]);
@@ -168,6 +166,50 @@ describe('LogsPage medication administration', () => {
     const body = posted[0] as { payload: { fp_initials: string; fc_initials: string } };
     expect(body.payload.fp_initials).toBe('data:image/png;base64,fp');
     expect(body.payload.fc_initials).toBe('data:image/png;base64,fc');
+  });
+
+  it('disables save while recording, then shows success and clears the form', async () => {
+    const pending = new Subject<{ id: string }>();
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            ...apiMock,
+            timezone: () => 'America/Chicago',
+            post: () => pending,
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'medication_administration';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    page.mar.notes = 'With food';
+    page.saveMar();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const button = host.querySelector('[data-test="save-mar"]') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(host.querySelector('[data-test="form-busy"]')).toBeTruthy();
+    pending.next({ id: 'log-1' });
+    pending.complete();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="form-success"]')?.textContent).toContain('saved');
+    expect(page.mar.notes).toBe('');
   });
 });
 
@@ -372,6 +414,75 @@ describe('LogsPage journal photos', () => {
     page.save({ notes: 'Scraped knee' });
     await fixture.whenStable();
     expect(page.saveError()).toContain('HEIC photo could not be read');
+  });
+
+  it('does not clear a pending save when Continue is clicked or photos change', async () => {
+    const pending = new Subject<{ id: string }>();
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'incident',
+                    name: 'Incident Report',
+                    description: '',
+                    scope: 'member',
+                    allows_photos: true,
+                    schema: { properties: { notes: { title: 'Notes' } } },
+                  },
+                ]);
+              }
+              if (path.includes('/members')) {
+                return of([{ id: 'm1', legal_name: 'Casey Child', household_role: 'child' }]);
+              }
+              return of([]);
+            },
+            post: () => pending,
+            upload: () => of({ id: 'att-1' }),
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'incident';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const original = new File(['png'], 'bruise.png', { type: 'image/png' });
+    await page.onPhotos({ target: { files: [original] } } as unknown as Event);
+    page.save({ notes: 'Scraped knee' });
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    const continueBtn = host.querySelector('[data-test="log-continue"]') as HTMLButtonElement;
+    const picker = host.querySelector('[data-test="log-photos"]') as HTMLInputElement;
+    expect(page.formAction.busy()).toBe(true);
+    expect(continueBtn.disabled).toBe(true);
+    expect(picker.disabled).toBe(true);
+    const selected = page.selected();
+    const { photos } = page;
+    page.formCode = 'daily_care';
+    page.start();
+    const other = new File(['png'], 'other.png', { type: 'image/png' });
+    await page.onPhotos({ target: { files: [other] } } as unknown as Event);
+    expect(page.formAction.busy()).toBe(true);
+    expect(page.selected()).toBe(selected);
+    expect(page.photos).toBe(photos);
+    expect(page.photos[0]?.name).toBe('bruise.png');
   });
 });
 

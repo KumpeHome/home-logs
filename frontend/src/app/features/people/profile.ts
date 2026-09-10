@@ -9,6 +9,8 @@ import { MemberPhoto } from '../../shared/member-photo';
 import { composeDose, DOSE_UNITS, parseDose } from '../../shared/dose';
 import { flagLabel, isAdministerable, MEDICATION_FLAGS } from '../../shared/medication';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
+import { FormStatus } from '../../shared/form-status';
+import { FormAction } from '../../shared/form-action';
 import { BelongingInventory } from './belonging-inventory';
 
 type Tab = 'overview' | 'health' | 'school' | 'team' | 'records' | 'permissions';
@@ -16,7 +18,7 @@ type PermResource = { code: string; name: string; group: string; actions: string
 
 @Component({
   selector: 'hl-profile',
-  imports: [FormsModule, MemberPhoto, RouterLink, DatePipe, BelongingInventory],
+  imports: [FormsModule, MemberPhoto, RouterLink, DatePipe, BelongingInventory, FormStatus],
   templateUrl: './profile.html',
   styleUrl: './profile.scss',
 })
@@ -38,6 +40,7 @@ export class ProfilePage {
   readonly otcCatalog = signal<any[]>([]);
   readonly medFilter = signal<'active' | 'inactive' | 'all'>('active');
   readonly editingMedId = signal<string | null>(null);
+  readonly medAction = new FormAction();
   readonly photoError = signal<string | null>(null);
   readonly photoAccept = PHOTO_ACCEPT;
   readonly medFlags = MEDICATION_FLAGS;
@@ -104,6 +107,10 @@ export class ProfilePage {
   }
 
   reload(id: string = this.memberId()): void {
+    this.refresh(id, true);
+  }
+
+  private refresh(id: string, resetUi = false): void {
     const hid = this.api.hid();
     const empty = catchError(() => of([] as any[]));
     forkJoin({
@@ -125,9 +132,11 @@ export class ProfilePage {
       this.enrollments.set(bundle.enrollments as any[]);
       this.documents.set(bundle.documents as any[]);
       this.discipline.set(bundle.discipline as any[]);
-      this.editing.set(false);
-      this.adding.set(null);
-      this.editingMedId.set(null);
+      if (resetUi) {
+        this.editing.set(false);
+        this.adding.set(null);
+        this.editingMedId.set(null);
+      }
       this.loadPermissions(id);
     });
   }
@@ -212,15 +221,18 @@ export class ProfilePage {
   }
 
   saveMedication(): void {
+    if (this.medAction.busy()) {
+      return;
+    }
     const id = this.memberId();
     const editId = this.editingMedId();
     const body = this.medPayload(this.med);
     const request = editId
       ? this.api.patch(`/households/${this.api.hid()}/members/${id}/medications/${editId}`, body)
       : this.api.post(`/households/${this.api.hid()}/members/${id}/medications`, body);
-    request.subscribe(() => {
+    this.medAction.run(request, editId ? 'Medication saved.' : 'Medication added.', () => {
       this.resetDraft('medications');
-      this.reload(id);
+      this.refresh(id);
     });
   }
 
