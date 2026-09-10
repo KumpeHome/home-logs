@@ -1,85 +1,50 @@
 import { TestBed } from '@angular/core/testing';
 import { provideHttpClient } from '@angular/common/http';
+import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AuthService } from './auth.service';
 
 describe('ApiService.upload', () => {
-  const originalXhr = globalThis.XMLHttpRequest;
+  let api: ApiService;
+  let httpMock: HttpTestingController;
 
-  afterEach(() => {
-    globalThis.XMLHttpRequest = originalXhr;
-  });
-
-  it('sends the PDF bytes with an application/pdf Content-Type instead of multipart', async () => {
-    const headers: string[] = [];
-    let sentBody: unknown;
-    globalThis.XMLHttpRequest = class {
-      status = 201;
-      responseText = '{"id":"t1"}';
-      onload: (() => void) | null = null;
-      onerror: (() => void) | null = null;
-      open(): void {}
-      setRequestHeader(name: string, value: string): void {
-        headers.push(`${name}: ${value}`);
-      }
-      send(body?: Document | XMLHttpRequestBodyInit | null): void {
-        sentBody = body;
-        this.onload?.();
-      }
-      abort(): void {}
-    } as unknown as typeof XMLHttpRequest;
-
+  beforeEach(() => {
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
+        provideHttpClientTesting(),
         { provide: AuthService, useValue: { token: () => 'dev-bypass', householdId: () => 'h1' } },
       ],
     });
-    const api = TestBed.inject(ApiService);
-    const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
-    const result = await firstValueFrom(api.uploadFile('/households/h1/members/m1/photo', file));
-    expect(result).toEqual({ id: 't1' });
-    expect(sentBody).toBe(file);
-    expect(headers).toContain('Content-Type: application/pdf');
-    expect(headers).toContain('Authorization: Bearer dev-bypass');
+    api = TestBed.inject(ApiService);
+    httpMock = TestBed.inject(HttpTestingController);
   });
 
-  it('posts FormData with fetch and does not set Content-Type so the browser can add the boundary', async () => {
-    const originalFetch = globalThis.fetch;
-    let requested: { url: unknown; init: RequestInit | undefined } | undefined;
-    globalThis.fetch = (async (url: unknown, init?: RequestInit) => {
-      requested = { url, init };
-      return new Response(JSON.stringify({ id: 'a1' }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' },
-      });
-    }) as typeof fetch;
-    try {
-      TestBed.configureTestingModule({
-        providers: [
-          provideHttpClient(),
-          {
-            provide: AuthService,
-            useValue: { token: () => 'dev-bypass', householdId: () => 'h1' },
-          },
-        ],
-      });
-      const api = TestBed.inject(ApiService);
-      const form = new FormData();
-      form.append('file', new File(['png'], 'bruise.png', { type: 'image/png' }));
-      const result = await firstValueFrom(
-        api.upload('/households/h1/logs/log-9/attachments', form),
-      );
-      expect(result).toEqual({ id: 'a1' });
-      expect(requested?.url).toBe('/api/households/h1/logs/log-9/attachments');
-      expect(requested?.init?.method).toBe('POST');
-      expect(requested?.init?.body).toBe(form);
-      const headers = new Headers(requested?.init?.headers);
-      expect(headers.get('Authorization')).toBe('Bearer dev-bypass');
-      expect(headers.has('Content-Type')).toBe(false);
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  afterEach(() => {
+    httpMock.verify();
+  });
+
+  it('sends the PDF bytes with an application/pdf Content-Type instead of multipart', async () => {
+    const file = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    const pending = firstValueFrom(api.uploadFile('/households/h1/members/m1/photo', file));
+    const req = httpMock.expectOne('/api/households/h1/members/m1/photo');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toBe(file);
+    expect(req.request.headers.get('Content-Type')).toBe('application/pdf');
+    req.flush({ id: 't1' }, { status: 201, statusText: 'Created' });
+    expect(await pending).toEqual({ id: 't1' });
+  });
+
+  it('posts FormData without Content-Type so the browser can add the boundary', async () => {
+    const form = new FormData();
+    form.append('file', new File(['png'], 'bruise.png', { type: 'image/png' }));
+    const pending = firstValueFrom(api.upload('/households/h1/logs/log-9/attachments', form));
+    const req = httpMock.expectOne('/api/households/h1/logs/log-9/attachments');
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toBe(form);
+    expect(req.request.headers.get('Content-Type')).toBeNull();
+    req.flush({ id: 'a1' });
+    expect(await pending).toEqual({ id: 'a1' });
   });
 });
