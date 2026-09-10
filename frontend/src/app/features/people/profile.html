@@ -365,6 +365,11 @@
           <li class="muted">None recorded.</li>
         }
       </ul>
+      <hl-form-status
+        [busy]="medAction.busy()"
+        [success]="medAction.success()"
+        [error]="medAction.error()"
+      />
       @if (adding() === 'medications') {
         <form
           class="hl-form"
@@ -438,7 +443,9 @@
               </label>
             }
           </fieldset>
-          <button class="hl-btn">{{ editingMedId() ? 'Save changes' : 'Save medication' }}</button>
+          <button class="hl-btn" data-test="save-medication" [disabled]="medAction.busy()">
+            {{ medAction.busy() ? 'Saving…' : editingMedId() ? 'Save changes' : 'Save medication' }}
+          </button>
         </form>
       }
     </section>

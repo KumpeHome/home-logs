@@ -12,6 +12,7 @@ DOSE_UNITS = (
     "units",
     "tablet",
     "capsule",
+    "gummy",
     "drop",
     "puff",
 )

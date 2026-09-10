@@ -1,19 +1,29 @@
 import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { RouterLink } from '@angular/router';
-import { Component, inject, signal } from '@angular/core';
+import { Component, inject, signal, viewChild } from '@angular/core';
 import { forkJoin, of } from 'rxjs';
 import { FormRenderer } from '../../shared/form-renderer';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { InitialsPad } from '../../shared/initials-pad';
 import { administerableChoices, flagLabel, type AdministerableMed } from '../../shared/medication';
+import { FormAction, formErrorMessage } from '../../shared/form-action';
+import { FormStatus } from '../../shared/form-status';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
 import { DocumentInput } from '../../shared/document-input';
 
 @Component({
   selector: 'hl-logs',
-  imports: [DatePipe, FormsModule, FormRenderer, InitialsPad, RouterLink, DocumentInput],
+  imports: [
+    DatePipe,
+    FormsModule,
+    FormRenderer,
+    FormStatus,
+    InitialsPad,
+    RouterLink,
+    DocumentInput,
+  ],
   template: `
     <header class="page-head">
       <div>
@@ -26,7 +36,7 @@ import { DocumentInput } from '../../shared/document-input';
       <form class="hl-form" (ngSubmit)="start()">
         <label
           >What happened
-          <select [(ngModel)]="formCode" name="form">
+          <select [(ngModel)]="formCode" name="form" [disabled]="formAction.busy()">
             @for (form of forms(); track form.code) {
               <option [value]="form.code">{{ form.name }}</option>
             }
@@ -34,28 +44,27 @@ import { DocumentInput } from '../../shared/document-input';
         </label>
         <label
           >Who is this for
-          <select [(ngModel)]="memberId" name="member">
+          <select [(ngModel)]="memberId" name="member" [disabled]="formAction.busy()">
             <option value="">Whole household</option>
             @for (member of members(); track member.id) {
               <option [value]="member.id">{{ member.legal_name }}</option>
             }
           </select>
         </label>
-        <button class="hl-btn" type="submit">Continue</button>
+        <button class="hl-btn" type="submit" data-test="log-continue" [disabled]="formAction.busy()">
+          Continue
+        </button>
       </form>
     </div>
     @if (selected(); as form) {
       <section class="hl-card">
         <h2>{{ form.name }}</h2>
         <p class="muted">{{ form.description }}</p>
-        @if (saveError(); as message) {
-          <p class="error" data-test="save-error">{{ message }}</p>
-        }
         @if (form.code === 'medication_administration') {
           <form class="hl-form" (ngSubmit)="saveMar()">
             <label
               >Medication
-              <select [(ngModel)]="mar.medication_id" name="med">
+              <select [(ngModel)]="mar.medication_id" name="med" [disabled]="formAction.busy()">
                 <option value="">Select a medication</option>
                 @for (med of meds(); track med.id) {
                   <option [value]="med.id">
@@ -114,7 +123,14 @@ import { DocumentInput } from '../../shared/document-input';
               <hl-initials-pad [(value)]="mar.fc_initials" testId="fc-initials" />
             </div>
             <label>Notes <textarea [(ngModel)]="mar.notes" name="notes"></textarea></label>
-            <button class="hl-btn">Record administration</button>
+            <hl-form-status
+              [busy]="formAction.busy()"
+              [success]="formAction.success()"
+              [error]="formAction.error()"
+            />
+            <button class="hl-btn" data-test="save-mar" [disabled]="formAction.busy()">
+              {{ formAction.busy() ? 'Saving…' : 'Record administration' }}
+            </button>
           </form>
         } @else {
           @if (form.allows_photos) {
@@ -125,6 +141,7 @@ import { DocumentInput } from '../../shared/document-input';
                 [accept]="photoAccept"
                 multiple
                 data-test="log-photos"
+                [disabled]="formAction.busy()"
                 (change)="onPhotos($event)"
               />
             </label>
@@ -142,7 +159,17 @@ import { DocumentInput } from '../../shared/document-input';
               />
             </div>
           }
-          <hl-form-renderer [schema]="form.schema" [members]="members()" (saved)="save($event)" />
+          <hl-form-status
+            [busy]="formAction.busy()"
+            [success]="formAction.success()"
+            [error]="formAction.error()"
+          />
+          <hl-form-renderer
+            [schema]="form.schema"
+            [members]="members()"
+            [busy]="formAction.busy()"
+            (saved)="save($event)"
+          />
         }
       </section>
     }
@@ -188,12 +215,13 @@ import { DocumentInput } from '../../shared/document-input';
 export class LogsPage {
   private readonly api = inject(ApiService);
   private readonly auth = inject(AuthService);
+  private readonly formRenderer = viewChild(FormRenderer);
   readonly forms = signal<any[]>([]);
   readonly members = signal<any[]>([]);
   readonly logs = signal<any[]>([]);
   readonly meds = signal<any[]>([]);
   readonly selected = signal<any>(null);
-  readonly saveError = signal<string | null>(null);
+  readonly formAction = new FormAction();
   formCode = 'daily_care';
   memberId = '';
   mar: any = this.emptyMar();
@@ -222,7 +250,10 @@ export class LogsPage {
   }
 
   start(): void {
-    this.saveError.set(null);
+    if (this.formAction.busy()) {
+      return;
+    }
+    this.formAction.clear();
     this.photos = [];
     this.certificate = null;
     this.loadMembers();
@@ -249,8 +280,11 @@ export class LogsPage {
   }
 
   async onPhotos(event: Event): Promise<void> {
+    if (this.formAction.busy()) {
+      return;
+    }
     const input = event.target as HTMLInputElement;
-    this.saveError.set(null);
+    this.formAction.clear();
     try {
       this.photos = await Promise.all(
         Array.from(input.files ?? []).map((file) => preparePhoto(file)),
@@ -258,7 +292,7 @@ export class LogsPage {
     } catch (err) {
       this.photos = [];
       input.value = '';
-      this.saveError.set(err instanceof Error ? err.message : 'Could not read that photo.');
+      this.formAction.fail(err instanceof Error ? err.message : 'Could not read that photo.');
     }
   }
 
@@ -267,9 +301,12 @@ export class LogsPage {
   }
 
   save(payload: Record<string, unknown>, occurredAt?: string): void {
-    this.saveError.set(null);
+    if (this.formAction.busy()) {
+      return;
+    }
+    this.formAction.begin();
     if (this.selected()?.scope === 'member' && !this.memberId) {
-      this.saveError.set('Select a household member before saving this form.');
+      this.formAction.fail('Select a household member before saving this form.');
       return;
     }
     this.api
@@ -283,8 +320,7 @@ export class LogsPage {
       .subscribe({
         next: (entry) => this.afterSave(entry.id),
         error: (err: { error?: { detail?: unknown } }) => {
-          const detail = err.error?.detail;
-          this.saveError.set(typeof detail === 'string' ? detail : 'Could not save this form.');
+          this.formAction.fail(formErrorMessage(err, 'Could not save this form.'));
         },
       });
   }
@@ -304,11 +340,13 @@ export class LogsPage {
       next: () => {
         this.photos = [];
         this.certificate = null;
+        this.resetSavedForm();
+        this.formAction.succeed('Record saved.');
         this.refresh();
       },
       error: (err: { error?: { detail?: unknown } }) => {
         const detail = err.error?.detail;
-        this.saveError.set(
+        this.formAction.fail(
           typeof detail === 'string' && detail.trim()
             ? `Saved the record, but ${detail}`
             : this.certificate
@@ -319,7 +357,18 @@ export class LogsPage {
     });
   }
 
+  private resetSavedForm(): void {
+    this.formRenderer()?.reset();
+    if (this.selected()?.code === 'medication_administration') {
+      this.mar = this.emptyMar();
+      this.mar.medication_id = this.meds()[0]?.id ?? '';
+    }
+  }
+
   saveMar(): void {
+    if (this.formAction.busy()) {
+      return;
+    }
     const med = this.meds().find((item) => item.id === this.mar.medication_id);
     const { occurred_at: occurredAt, ...fields } = this.mar;
     this.save(
@@ -367,5 +416,9 @@ export class LogsPage {
 
   timezone(): string {
     return this.api.timezone();
+  }
+
+  saveError(): string | null {
+    return this.formAction.error();
   }
 }
