@@ -12,6 +12,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     Image,
@@ -36,6 +37,33 @@ def paragraph_text(value: object) -> str:
     if value is None:
         return ""
     return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def wrap_text_lines(
+    text: str,
+    width: float,
+    *,
+    font_name: str = "Helvetica",
+    font_size: float = 9,
+) -> list[str]:
+    lines: list[str] = []
+    blocks = str(text or "").replace("\r\n", "\n").split("\n")
+    for index, block in enumerate(blocks):
+        words = block.split()
+        if not words:
+            if index < len(blocks) - 1:
+                lines.append("")
+            continue
+        current = words[0]
+        for word in words[1:]:
+            trial = f"{current} {word}"
+            if stringWidth(trial, font_name, font_size) <= width:
+                current = trial
+            else:
+                lines.append(current)
+                current = word
+        lines.append(current)
+    return lines
 
 
 def initials_cell(
@@ -222,23 +250,6 @@ def _cfs400_row_rects(page) -> list[list[list[float]]]:
     return [lifted, *field_rows]
 
 
-def _wrap_lines(painter: canvas.Canvas, text: str, width: float) -> list[str]:
-    words = str(text or "").split()
-    if not words:
-        return []
-    lines: list[str] = []
-    current = words[0]
-    for word in words[1:]:
-        trial = f"{current} {word}"
-        if painter.stringWidth(trial) <= width:
-            current = trial
-        else:
-            lines.append(current)
-            current = word
-    lines.append(current)
-    return lines
-
-
 def _draw_boxed(
     painter: canvas.Canvas, text: str, rect: list[float], size: float = 8
 ) -> None:
@@ -246,7 +257,7 @@ def _draw_boxed(
     width = x1 - x0 - 6
     height = y1 - y0 - 4
     painter.setFont("Helvetica", size)
-    lines = _wrap_lines(painter, text, width)
+    lines = wrap_text_lines(text, width, font_name="Helvetica", font_size=size)
     leading = size + 1.5
     max_lines = max(1, int(height // leading))
     top = y1 - size - 2

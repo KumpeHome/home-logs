@@ -3,6 +3,8 @@ from io import BytesIO
 
 from pypdf import PdfReader
 
+from app.exports.ar_dcfs_forms import journal_entries_pdf
+
 
 def _household(client) -> str:
     return client.post(
@@ -713,6 +715,78 @@ def test_export_journal_entries_paginates_after_eight_rows(client) -> None:
     assert "Journal row 9 unique note." not in first
     assert "Journal row 9 unique note." in second
     assert "Casey Child" in second
+
+
+def test_journal_entries_keeps_three_incident_lines_in_one_row() -> None:
+    long_entry = (
+        "First unique scrape line after soccer.\n"
+        "Second unique scrape line after soccer.\n"
+        "Third unique scrape line after soccer."
+    )
+    rows = [("2026-08-01", "4:30 PM", long_entry)]
+    rows.extend(
+        (
+            f"2026-08-{index + 2:02d}",
+            "4:30 PM",
+            f"Short journal note {index + 1} unique.",
+        )
+        for index in range(7)
+    )
+    pages = PdfReader(BytesIO(journal_entries_pdf([("Casey Child", rows)]))).pages
+    assert len(pages) == 1
+    text = pages[0].extract_text() or ""
+    assert "First unique scrape line after soccer." in text
+    assert "Third unique scrape line after soccer." in text
+    assert "Short journal note 7 unique." in text
+
+
+def test_journal_entries_overflow_line_expands_into_next_row() -> None:
+    long_entry = (
+        "First unique scrape line after soccer.\n"
+        "Second unique scrape line after soccer.\n"
+        "Third unique scrape line after soccer.\n"
+        "Fourth unique scrape line after soccer."
+    )
+    rows = [("2026-08-01", "4:30 PM", long_entry)]
+    rows.extend(
+        (
+            f"2026-08-{index + 2:02d}",
+            "4:30 PM",
+            f"Short journal note {index + 1} unique.",
+        )
+        for index in range(7)
+    )
+    pages = PdfReader(BytesIO(journal_entries_pdf([("Casey Child", rows)]))).pages
+    assert len(pages) == 2
+    first = pages[0].extract_text() or ""
+    second = pages[1].extract_text() or ""
+    assert "Fourth unique scrape line after soccer." in first
+    assert "Short journal note 6 unique." in first
+    assert "Short journal note 7 unique." not in first
+    assert "Short journal note 7 unique." in second
+
+
+def test_journal_entries_word_wraps_long_incident_onto_extra_rows() -> None:
+    incident = " ".join(f"WrapToken{index:02d}" for index in range(80))
+    rows = [("2026-08-01", "4:30 PM", incident)]
+    rows.extend(
+        (
+            f"2026-08-{index + 2:02d}",
+            "4:30 PM",
+            f"Short journal note {index + 1} unique.",
+        )
+        for index in range(7)
+    )
+    pdf = journal_entries_pdf([("Casey Child", rows)])
+    pages = PdfReader(BytesIO(pdf)).pages
+    assert len(pages) >= 2
+    text = _pdf_text(pdf)
+    for index in range(80):
+        assert f"WrapToken{index:02d}" in text
+    first = pages[0].extract_text() or ""
+    second = pages[1].extract_text() or ""
+    assert "Short journal note 7 unique." in second
+    assert "Short journal note 7 unique." not in first
 
 
 def test_export_personal_belonging_pdf_matches_cfs350(client) -> None:
