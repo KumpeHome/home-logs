@@ -16,7 +16,13 @@ from reportlab.platypus import (
     TableStyle,
 )
 
-from app.exports.pdfs import _styles, _table_style, initials_cell
+from app.exports.pdfs import (
+    _styles,
+    _table_style,
+    initials_cell,
+    paragraph_text,
+    wrap_text_lines,
+)
 from app.forms.catalog import BELONGING_CATEGORIES
 
 
@@ -158,7 +164,83 @@ def weekly_med_chart_pdf(
     return buffer.getvalue()
 
 
-def journal_entries_pdf(pages: list[tuple[str, list[tuple[str, str, str]]]]) -> bytes:
+_JOURNAL_ROWS_PER_PAGE = 8
+_JOURNAL_LINES_PER_ROW = 3
+_JOURNAL_INCIDENT_WIDTH = 4.8 * inch
+_JOURNAL_CELL_X_PAD = 12
+_JOURNAL_CELL_Y_PAD = 3
+_JOURNAL_FONT_SIZE = 9
+_JOURNAL_LEADING = 11
+_JOURNAL_ROW_HEIGHT = (
+    _JOURNAL_LINES_PER_ROW * _JOURNAL_LEADING + 2 * _JOURNAL_CELL_Y_PAD
+)
+JournalRow = tuple[str, str, str]
+
+
+def _journal_line_chunks(incident: str) -> list[list[str]]:
+    lines = wrap_text_lines(
+        incident,
+        _JOURNAL_INCIDENT_WIDTH - _JOURNAL_CELL_X_PAD,
+        font_name="Helvetica",
+        font_size=_JOURNAL_FONT_SIZE,
+    )
+    if not lines:
+        return [[]]
+    return [
+        lines[start : start + _JOURNAL_LINES_PER_ROW]
+        for start in range(0, len(lines), _JOURNAL_LINES_PER_ROW)
+    ]
+
+
+def _journal_page_rows(rows: list[JournalRow]) -> list[list[JournalRow]]:
+    filled = list(rows) or [("", "", "")]
+    pages: list[list[JournalRow]] = []
+    current: list[JournalRow] = []
+    for date, time, incident in filled:
+        for index, chunk in enumerate(_journal_line_chunks(incident)):
+            if len(current) >= _JOURNAL_ROWS_PER_PAGE:
+                pages.append(current)
+                current = []
+            current.append(
+                (
+                    date if index == 0 else "",
+                    time if index == 0 else "",
+                    "\n".join(chunk),
+                )
+            )
+    if current:
+        current.extend([("", "", "")] * (_JOURNAL_ROWS_PER_PAGE - len(current)))
+        pages.append(current)
+    return pages
+
+
+def _journal_incident_cell(incident: str, style: ParagraphStyle):
+    if not incident:
+        return ""
+    lines = [paragraph_text(line) for line in incident.split("\n")]
+    return Paragraph("<br/>".join(lines), style)
+
+
+def _journal_table(filled: list[JournalRow], incident_style: ParagraphStyle) -> Table:
+    data = [["Date", "Time", "Incident"]]
+    data.extend(
+        [date, time, _journal_incident_cell(incident, incident_style)]
+        for date, time, incident in filled
+    )
+    table = Table(
+        data,
+        colWidths=[1.2 * inch, 1.1 * inch, _JOURNAL_INCIDENT_WIDTH],
+        rowHeights=[18] + [_JOURNAL_ROW_HEIGHT] * len(filled),
+    )
+    style = _table_style()
+    style.add("VALIGN", (0, 1), (-1, -1), "TOP")
+    style.add("TOPPADDING", (0, 1), (-1, -1), _JOURNAL_CELL_Y_PAD)
+    style.add("BOTTOMPADDING", (0, 1), (-1, -1), _JOURNAL_CELL_Y_PAD)
+    table.setStyle(style)
+    return table
+
+
+def journal_entries_pdf(pages: list[tuple[str, list[JournalRow]]]) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -179,47 +261,42 @@ def journal_entries_pdf(pages: list[tuple[str, list[tuple[str, str, str]]]]) -> 
     body = ParagraphStyle(
         "JournalBody", parent=styles["Normal"], alignment=0, leading=13
     )
+    incident_style = ParagraphStyle(
+        "JournalIncident",
+        fontName="Helvetica",
+        fontSize=_JOURNAL_FONT_SIZE,
+        leading=_JOURNAL_LEADING,
+    )
     story: list = []
-    sheets: list[tuple[str, list[tuple[str, str, str]]]] = []
+    sheets = []
     if not pages:
         pages = [("", [])]
     for child_name, rows in pages:
-        filled = list(rows) or [("", "", "")]
-        for start in range(0, len(filled), 8):
-            chunk = list(filled[start : start + 8])
-            while len(chunk) < 8:
-                chunk.append(("", "", ""))
-            sheets.append((child_name, chunk))
+        for page_rows in _journal_page_rows(rows):
+            sheets.append((child_name, page_rows))
     for index, (child_name, filled) in enumerate(sheets):
         if index:
             story.append(PageBreak())
-        story.append(Paragraph("<u>Journal Entries</u>", title))
-        story.append(Spacer(1, 10))
-        story.append(
-            Paragraph(
-                "Please use this form to document incidents that involve bruises, "
-                "scrapes, cuts, etc. on a child; medication changes that impact the "
-                "child behavior; unusual behaviors in the child, etc.",
-                body,
-            )
+        story.extend(
+            [
+                Paragraph("<u>Journal Entries</u>", title),
+                Spacer(1, 10),
+                Paragraph(
+                    "Please use this form to document incidents that involve "
+                    "bruises, scrapes, cuts, etc. on a child; medication changes "
+                    "that impact the child behavior; unusual behaviors in the "
+                    "child, etc.",
+                    body,
+                ),
+                Spacer(1, 12),
+                Paragraph(
+                    f"Child's Name: {child_name or '________________________________'}",
+                    styles["Normal"],
+                ),
+                Spacer(1, 10),
+                _journal_table(filled, incident_style),
+            ]
         )
-        story.append(Spacer(1, 12))
-        story.append(
-            Paragraph(
-                f"Child's Name: {child_name or '________________________________'}",
-                styles["Normal"],
-            )
-        )
-        story.append(Spacer(1, 10))
-        data = [["Date", "Time", "Incident"]]
-        data.extend([list(row) for row in filled])
-        table = Table(
-            data,
-            colWidths=[1.2 * inch, 1.1 * inch, 4.8 * inch],
-            rowHeights=[18] + [36] * len(filled),
-        )
-        table.setStyle(_table_style())
-        story.append(table)
     doc.build(story)
     return buffer.getvalue()
 
