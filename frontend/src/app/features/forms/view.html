@@ -11,6 +11,16 @@
       <p class="error">{{ message }}</p>
     }
     <div class="actions">
+      @if (canEditBehavior()) {
+        <a
+          class="hl-btn"
+          data-test="edit-behavior-form"
+          routerLink="/discipline"
+          [queryParams]="{ edit: entry.id }"
+        >
+          Edit
+        </a>
+      }
       <button
         class="hl-btn secondary"
         type="button"

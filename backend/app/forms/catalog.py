@@ -426,6 +426,61 @@ INCIDENT = FormType(
     allows_photos=True,
 )
 
+BEHAVIOR = FormType(
+    code="behavior",
+    name="Behavior",
+    category="foster",
+    scope="member",
+    description=(
+        "ABC behavior note: what happened before, during, and after, and what helped."
+    ),
+    schema=_object(
+        "Behavior",
+        {
+            "location": _string("Where"),
+            "antecedent": {
+                "type": "string",
+                "title": "What was going on beforehand",
+                "x-widget": "textarea",
+            },
+            "behavior": {
+                "type": "string",
+                "title": "What happened",
+                "x-widget": "textarea",
+            },
+            "intervention": {
+                "type": "string",
+                "title": "What helped",
+                "x-widget": "textarea",
+            },
+            "consequence": {
+                "type": "string",
+                "title": "What followed",
+                "x-widget": "textarea",
+            },
+            "duration_minutes": _integer("How long (minutes)"),
+            "follow_up": {
+                "type": "string",
+                "title": "Follow-up",
+                "x-widget": "textarea",
+            },
+            "notified": _array("People notified"),
+        },
+        ["antecedent", "behavior", "intervention", "consequence"],
+    ),
+    export_paths=(
+        "payload.location",
+        "payload.antecedent",
+        "payload.behavior",
+        "payload.intervention",
+        "payload.consequence",
+        "payload.duration_minutes",
+        "payload.follow_up",
+        "payload.notified",
+        "log.occurred_at",
+    ),
+)
+
 RPP = FormType(
     code="reasonable_prudent_parenting",
     name="Reasonable and Prudent Parenting",
@@ -792,6 +847,7 @@ FORM_TYPES: tuple[FormType, ...] = (
     GAL_CONTACT,
     RESPITE,
     INCIDENT,
+    BEHAVIOR,
     JOURNAL_ENTRY,
     PERSONAL_BELONGING,
     RPP,

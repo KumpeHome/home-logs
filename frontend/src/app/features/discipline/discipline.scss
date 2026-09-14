@@ -1,0 +1,35 @@
+.head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.85rem 1rem;
+  margin: 0;
+}
+
+.facts div {
+  display: grid;
+  gap: 0.15rem;
+}
+
+dt {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--kh-text-muted);
+}
+
+dd {
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+td .hl-btn {
+  margin-right: 0.35rem;
+  margin-bottom: 0.25rem;
+}

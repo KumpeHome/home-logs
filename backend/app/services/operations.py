@@ -645,11 +645,79 @@ class PdfTemplateService:
         return overlay_pdf(source, template.placeholders, values)
 
 
+def serialize_discipline(record: DisciplineRecord) -> dict:
+    return {
+        "id": record.id,
+        "member_id": record.member_id,
+        "occurred_at": iso_utc(record.occurred_at),
+        "location": record.location,
+        "antecedent": record.antecedent,
+        "behavior": record.behavior,
+        "intervention": record.intervention,
+        "consequence": record.consequence,
+        "duration_minutes": record.duration_minutes,
+        "follow_up": record.follow_up,
+        "notified": record.notified,
+        "log_entry_id": record.log_entry_id,
+    }
+
+
 class DisciplineService:
     def __init__(self, db: Session) -> None:
         self.db = db
         self.households = HouseholdService(db)
         self.logs = LogService(db)
+
+    def _payload(self, data: DisciplineIn) -> dict:
+        payload: dict = {
+            "location": data.location or "Home",
+            "antecedent": data.antecedent,
+            "behavior": data.behavior,
+            "intervention": data.intervention,
+            "consequence": data.consequence,
+            "follow_up": data.follow_up or "",
+            "notified": list(data.notified),
+        }
+        if data.duration_minutes is not None:
+            payload["duration_minutes"] = data.duration_minutes
+        return payload
+
+    def _apply(self, record: DisciplineRecord, data: DisciplineIn) -> None:
+        self.households.get_member(record.household_id, data.member_id)
+        record.member_id = data.member_id
+        record.occurred_at = to_utc_naive(data.occurred_at)
+        record.location = data.location
+        record.antecedent = data.antecedent
+        record.behavior = data.behavior
+        record.intervention = data.intervention
+        record.consequence = data.consequence
+        record.duration_minutes = data.duration_minutes
+        record.follow_up = data.follow_up
+        record.notified = list(data.notified)
+
+    def _notified_values(self, value: object) -> list:
+        if isinstance(value, list):
+            return list(value)
+        if isinstance(value, str):
+            return [part.strip() for part in value.split(",") if part.strip()]
+        return []
+
+    def _record_from_log(self, household_id: str, entry: LogEntry) -> DisciplineRecord:
+        payload = entry.payload or {}
+        return DisciplineRecord(
+            household_id=household_id,
+            member_id=entry.subject_member_id,
+            occurred_at=entry.occurred_at,
+            location=payload.get("location"),
+            antecedent=str(payload.get("antecedent") or ""),
+            behavior=str(payload.get("behavior") or ""),
+            intervention=str(payload.get("intervention") or ""),
+            consequence=str(payload.get("consequence") or ""),
+            duration_minutes=payload.get("duration_minutes"),
+            follow_up=payload.get("follow_up"),
+            notified=self._notified_values(payload.get("notified")),
+            log_entry_id=entry.id,
+        )
 
     def create(
         self, household_id: str, data: DisciplineIn, actor, recorder
@@ -658,18 +726,10 @@ class DisciplineService:
         log = self.logs.create(
             household_id,
             LogCreate(
-                form_type_code="incident",
+                form_type_code="behavior",
                 subject_member_id=data.member_id,
                 occurred_at=data.occurred_at,
-                payload={
-                    "severity": "moderate",
-                    "location": data.location or "Home",
-                    "what_happened": data.behavior,
-                    "people_involved": [],
-                    "injury": False,
-                    "notified": data.notified,
-                    "follow_up": data.follow_up or "",
-                },
+                payload=self._payload(data),
                 submit=True,
             ),
             actor,
@@ -693,6 +753,58 @@ class DisciplineService:
         self.db.flush()
         return record
 
+    def get(self, household_id: str, record_id: str) -> DisciplineRecord:
+        record = self.db.get(DisciplineRecord, record_id)
+        if record is None or record.household_id != household_id:
+            raise DomainError("Behavior note not found", 404)
+        return record
+
+    def update(
+        self, household_id: str, record_id: str, data: DisciplineIn, actor, recorder
+    ) -> DisciplineRecord:
+        record = self.get(household_id, record_id)
+        self._apply(record, data)
+        if record.log_entry_id:
+            entry = self.logs.get(household_id, record.log_entry_id)
+            payload = self._payload(data)
+            if entry.status == "draft":
+                self.logs.update_draft(
+                    household_id,
+                    entry.id,
+                    LogCreate(
+                        form_type_code="behavior",
+                        subject_member_id=data.member_id,
+                        occurred_at=data.occurred_at,
+                        payload=payload,
+                    ),
+                    actor,
+                )
+            else:
+                entry.form_type_code = "behavior"
+                amended = self.logs.amend(
+                    household_id,
+                    entry.id,
+                    LogAmend(
+                        payload=payload,
+                        occurred_at=data.occurred_at,
+                        reason="Updated behavior note",
+                    ),
+                    actor,
+                    recorder,
+                )
+                record.log_entry_id = amended.id
+        audit(
+            self.db,
+            household_id=household_id,
+            actor_subject=actor.subject,
+            actor_email=actor.email,
+            action="update",
+            entity_type="discipline",
+            entity_id=record.id,
+            summary="Updated behavior note",
+        )
+        return record
+
     def list(
         self, household_id: str, member_id: str | None = None
     ) -> list[DisciplineRecord]:
@@ -703,6 +815,21 @@ class DisciplineService:
             stmt = stmt.where(DisciplineRecord.member_id == member_id)
         stmt = stmt.order_by(DisciplineRecord.occurred_at.desc())
         return list(self.db.scalars(stmt))
+
+    def attach_from_log(
+        self, household_id: str, entry: LogEntry
+    ) -> DisciplineRecord | None:
+        if entry.form_type_code != "behavior" or not entry.subject_member_id:
+            return None
+        existing = self.db.scalar(
+            select(DisciplineRecord).where(DisciplineRecord.log_entry_id == entry.id)
+        )
+        if existing:
+            return existing
+        record = self._record_from_log(household_id, entry)
+        self.db.add(record)
+        self.db.flush()
+        return record
 
 
 class EducationService:

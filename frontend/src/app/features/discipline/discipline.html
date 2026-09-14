@@ -1,0 +1,157 @@
+<header class="page-head">
+  <div>
+    <p class="eyebrow">Care</p>
+    <h1>Behavior notes</h1>
+    <p class="lede">
+      A respectful place to write down what happened, what helped, and what to try next.
+    </p>
+  </div>
+  @if (!adding() && canAdd()) {
+    <button class="hl-btn" type="button" (click)="startAdd()">Add a note</button>
+  }
+</header>
+@if (viewing(); as row) {
+  <section class="hl-card" data-test="behavior-detail">
+    <div class="head">
+      <h2>Behavior note</h2>
+      <div class="head-actions">
+        @if (row.log_entry_id) {
+          <a
+            class="hl-btn secondary"
+            data-test="view-behavior-form"
+            [routerLink]="['/forms', row.log_entry_id]"
+            >View form</a
+          >
+        }
+        @if (canEdit()) {
+          <button class="hl-btn" type="button" (click)="startEdit(row)">Edit</button>
+        }
+        <button class="hl-btn ghost" type="button" (click)="viewing.set(null)">Close</button>
+      </div>
+    </div>
+    <dl class="facts">
+      <div>
+        <dt>When</dt>
+        <dd>{{ row.occurred_at | date: 'short' }}</dd>
+      </div>
+      <div>
+        <dt>Where</dt>
+        <dd>{{ row.location || '—' }}</dd>
+      </div>
+      <div>
+        <dt>What was going on beforehand</dt>
+        <dd>{{ row.antecedent }}</dd>
+      </div>
+      <div>
+        <dt>What happened</dt>
+        <dd>{{ row.behavior }}</dd>
+      </div>
+      <div>
+        <dt>What helped</dt>
+        <dd>{{ row.intervention }}</dd>
+      </div>
+      <div>
+        <dt>What followed</dt>
+        <dd>{{ row.consequence }}</dd>
+      </div>
+      <div>
+        <dt>How long (minutes)</dt>
+        <dd>{{ row.duration_minutes ?? '—' }}</dd>
+      </div>
+      <div>
+        <dt>Follow-up</dt>
+        <dd>{{ row.follow_up || '—' }}</dd>
+      </div>
+      <div>
+        <dt>People notified</dt>
+        <dd>{{ (row.notified || []).join(', ') || '—' }}</dd>
+      </div>
+    </dl>
+  </section>
+}
+@if (adding()) {
+  <section class="hl-card">
+    <div class="head">
+      <h2>{{ editingId ? 'Edit note' : 'What happened' }}</h2>
+      <button class="hl-btn ghost" type="button" (click)="cancel()">Cancel</button>
+    </div>
+    <form class="hl-form" (ngSubmit)="save()">
+      <label
+        >Who
+        <select [(ngModel)]="draft.member_id" name="mid" [disabled]="formAction.busy()">
+          @for (member of members(); track member.id) {
+            <option [value]="member.id">{{ member.legal_name }}</option>
+          }
+        </select>
+      </label>
+      <label>When <input type="datetime-local" [(ngModel)]="draft.occurred_at" name="when" /></label>
+      <label>Where <input [(ngModel)]="draft.location" name="loc" /></label>
+      <label
+        >What was going on beforehand <textarea [(ngModel)]="draft.antecedent" name="ant"></textarea
+      ></label>
+      <label>What happened <textarea [(ngModel)]="draft.behavior" name="beh"></textarea></label>
+      <label>What helped <textarea [(ngModel)]="draft.intervention" name="int"></textarea></label>
+      <label>What followed <textarea [(ngModel)]="draft.consequence" name="con"></textarea></label>
+      <label
+        >How long (minutes)
+        <input type="number" [(ngModel)]="draft.duration_minutes" name="dur"
+      /></label>
+      <label>Follow-up <textarea [(ngModel)]="draft.follow_up" name="fu"></textarea></label>
+      <label>People notified (comma separated) <input [(ngModel)]="notified" name="note" /></label>
+      <hl-form-status
+        [busy]="formAction.busy()"
+        [success]="formAction.success()"
+        [error]="formAction.error()"
+      />
+      <button class="hl-btn" [disabled]="formAction.busy()">
+        {{ formAction.busy() ? 'Saving…' : editingId ? 'Save changes' : 'Save notes' }}
+      </button>
+    </form>
+  </section>
+}
+@if (rows().length) {
+  <div class="table-wrap">
+    <table>
+      <tr>
+        <th>When</th>
+        <th>What happened</th>
+        <th>What helped</th>
+        <th>Follow-up</th>
+        <th></th>
+      </tr>
+      @for (row of rows(); track row.id) {
+        <tr>
+          <td>{{ row.occurred_at | date: 'short' }}</td>
+          <td>{{ row.behavior }}</td>
+          <td>{{ row.intervention }}</td>
+          <td>{{ row.follow_up }}</td>
+          <td>
+            <button class="hl-btn secondary" type="button" data-test="view-behavior" (click)="view(row)">
+              View
+            </button>
+            @if (canEdit()) {
+              <button
+                class="hl-btn secondary"
+                type="button"
+                data-test="edit-behavior"
+                (click)="startEdit(row)"
+              >
+                Edit
+              </button>
+            }
+          </td>
+        </tr>
+      }
+    </table>
+  </div>
+} @else if (!adding()) {
+  <section class="hl-card">
+    <div class="empty">
+      <strong>No behavior notes yet</strong>
+      <span
+        >When something is worth remembering, add a short note. Keep the language factual and
+        kind.</span
+      >
+    </div>
+  </section>
+}

@@ -5,6 +5,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any
 
+from PIL import Image as PILImage
 from pypdf import PdfReader, PdfWriter
 from pypdf.errors import PdfReadError, PdfStreamError
 from pypdf.generic import NameObject
@@ -39,6 +40,47 @@ def paragraph_text(value: object) -> str:
     return str(value).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
 
+def _fragments_fitting_width(
+    word: str,
+    width: float,
+    font_name: str,
+    font_size: float,
+) -> list[str]:
+    if stringWidth(word, font_name, font_size) <= width:
+        return [word]
+    fragments: list[str] = []
+    current = ""
+    for char in word:
+        trial = f"{current}{char}"
+        if current and stringWidth(trial, font_name, font_size) > width:
+            fragments.append(current)
+            current = char
+        else:
+            current = trial
+    if current:
+        fragments.append(current)
+    return fragments
+
+
+def _push_fragment(
+    lines: list[str],
+    current: str,
+    fragment: str,
+    *,
+    join_with_space: bool,
+    width: float,
+    font_name: str,
+    font_size: float,
+) -> str:
+    if current:
+        if join_with_space:
+            trial = f"{current} {fragment}"
+            if stringWidth(trial, font_name, font_size) <= width:
+                return trial
+        lines.append(current)
+    return fragment
+
+
 def wrap_text_lines(
     text: str,
     width: float,
@@ -54,16 +96,70 @@ def wrap_text_lines(
             if index < len(blocks) - 1:
                 lines.append("")
             continue
-        current = words[0]
-        for word in words[1:]:
-            trial = f"{current} {word}"
-            if stringWidth(trial, font_name, font_size) <= width:
-                current = trial
-            else:
-                lines.append(current)
-                current = word
-        lines.append(current)
+        current = ""
+        for word in words:
+            fragments = _fragments_fitting_width(word, width, font_name, font_size)
+            for fragment_index, fragment in enumerate(fragments):
+                current = _push_fragment(
+                    lines,
+                    current,
+                    fragment,
+                    join_with_space=fragment_index == 0,
+                    width=width,
+                    font_name=font_name,
+                    font_size=font_size,
+                )
+        if current:
+            lines.append(current)
     return lines
+
+
+_INITIALS_MIN_PX = (220, 80)
+_INK_WHITE_CUTOFF = 245
+_INK_PAD_PX = 8
+
+
+def _ink_bbox(image: PILImage.Image) -> tuple[int, int, int, int] | None:
+    mask = image.convert("L").point(
+        lambda pixel: 0 if pixel > _INK_WHITE_CUTOFF else 255
+    )
+    return mask.getbbox()
+
+
+def _fit_box(
+    width: float, height: float, box_width: float, box_height: float
+) -> tuple[float, float]:
+    scale = min(box_width / max(width, 1), box_height / max(height, 1))
+    return width * scale, height * scale
+
+
+def _prepare_initials_raster(raw: bytes) -> tuple[BytesIO, tuple[int, int]]:
+    source = PILImage.open(BytesIO(raw)).convert("RGBA")
+    background = PILImage.new("RGBA", source.size, (255, 255, 255, 255))
+    flat = PILImage.alpha_composite(background, source).convert("RGB")
+    box = _ink_bbox(flat)
+    if box:
+        left, top, right, bottom = box
+        flat = flat.crop(
+            (
+                max(0, left - _INK_PAD_PX),
+                max(0, top - _INK_PAD_PX),
+                min(flat.width, right + _INK_PAD_PX),
+                min(flat.height, bottom + _INK_PAD_PX),
+            )
+        )
+    width, height = flat.size
+    min_width, min_height = _INITIALS_MIN_PX
+    scale = max(min_width / max(width, 1), min_height / max(height, 1), 1)
+    if scale > 1:
+        flat = flat.resize(
+            (max(1, round(width * scale)), max(1, round(height * scale))),
+            PILImage.Resampling.LANCZOS,
+        )
+    output = BytesIO()
+    flat.save(output, format="PNG")
+    output.seek(0)
+    return output, flat.size
 
 
 def initials_cell(
@@ -78,12 +174,22 @@ def initials_cell(
     try:
         _header, encoded = text.split(",", 1)
         raw = base64.b64decode(encoded)
+        raster, size = _prepare_initials_raster(raw)
     except (ValueError, OSError):
         return ""
+    draw_width, draw_height = _fit_box(
+        float(size[0]),
+        float(size[1]),
+        width or 0.7 * inch,
+        height or 0.32 * inch,
+    )
     return Image(
-        BytesIO(raw),
-        width=width or 0.7 * inch,
-        height=height or 0.32 * inch,
+        raster,
+        width=draw_width,
+        height=draw_height,
+        mask=None,
+        kind="direct",
+        hAlign="CENTER",
     )
 
 

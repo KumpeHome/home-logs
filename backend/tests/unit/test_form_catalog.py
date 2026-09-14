@@ -65,6 +65,7 @@ def test_catalog_includes_required_home_and_foster_forms() -> None:
         "family_visit",
         "court_hearing",
         "incident",
+        "behavior",
         "reasonable_prudent_parenting",
         "sibling_contact",
         "journal_entry",
