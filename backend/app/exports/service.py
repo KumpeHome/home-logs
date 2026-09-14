@@ -97,6 +97,7 @@ class OfficialExportService:
         start_date: date,
         end_date: date,
         member_ids: list[str],
+        include_prn: bool = False,
     ) -> bytes:
         spec = get_official_export(form_code)
         selected = list(member_ids)
@@ -123,7 +124,9 @@ class OfficialExportService:
             )
         if spec.code == "ar_dcfs_weekly_med_chart":
             return weekly_med_chart_pdf(
-                self._weekly_med_pages(entries, selected, tz_name)
+                self._weekly_med_pages(
+                    entries, selected, tz_name, include_prn=include_prn
+                )
             )
         if spec.code == "ar_dcfs_journal_entries":
             return journal_entries_pdf(self._journal_pages(entries, selected))
@@ -234,7 +237,11 @@ class OfficialExportService:
         return pages
 
     def _weekly_med_pages(
-        self, entries: list[LogEntry], selected: list[str], tz_name: str
+        self,
+        entries: list[LogEntry],
+        selected: list[str],
+        tz_name: str,
+        include_prn: bool = False,
     ) -> list[tuple[str, str, str, list[dict]]]:
         pages: list[tuple[str, str, str, list[dict]]] = []
         stamps = _recorder_drawings(entries)
@@ -245,9 +252,11 @@ class OfficialExportService:
                     continue
                 if entry.payload.get("outcome") not in (None, "", "given"):
                     continue
+                med_id = str(entry.payload.get("medication_id") or "")
+                if not include_prn and self._medication_is_prn(med_id):
+                    continue
                 day = local_date(entry.occurred_at, tz_name)
                 week = _week_start_sunday(day)
-                med_id = str(entry.payload.get("medication_id") or "")
                 name = str(entry.payload.get("medication_name") or "")
                 key = med_id or name
                 bucket = weeks.setdefault(week, {})
@@ -285,16 +294,31 @@ class OfficialExportService:
                     pages.append((child, stamp, end_stamp, all_meds[index : index + 4]))
         return pages
 
-    def _medication_frequency(self, medication_id: str) -> str:
+    def _medication_record(
+        self, medication_id: str
+    ) -> Medication | HouseholdOtcMedication | None:
         if not medication_id:
-            return ""
+            return None
         med = self.db.get(Medication, medication_id)
         if med is not None:
-            return med.frequency
-        otc = self.db.get(HouseholdOtcMedication, medication_id)
-        if otc is not None:
+            return med
+        return self.db.get(HouseholdOtcMedication, medication_id)
+
+    def _medication_frequency(self, medication_id: str) -> str:
+        item = self._medication_record(medication_id)
+        if isinstance(item, Medication):
+            return item.frequency
+        if isinstance(item, HouseholdOtcMedication):
             return "as needed"
         return ""
+
+    def _medication_is_prn(self, medication_id: str) -> bool:
+        item = self._medication_record(medication_id)
+        if isinstance(item, HouseholdOtcMedication):
+            return True
+        if isinstance(item, Medication):
+            return bool(item.is_prn) or _is_prn_frequency(item.frequency)
+        return False
 
     def _journal_pages(
         self, entries: list[LogEntry], selected: list[str]
@@ -380,6 +404,11 @@ class OfficialExportService:
                 else:
                     visits.append(("", when, worker))
         return foster_home_log_pdf(month_name, trainings, drills, visits)
+
+
+def _is_prn_frequency(frequency: str) -> bool:
+    text = frequency.strip().lower()
+    return text == "prn" or text.startswith("prn ") or "as needed" in text
 
 
 def _week_start_sunday(day: date) -> date:
