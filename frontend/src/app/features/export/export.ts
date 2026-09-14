@@ -88,6 +88,17 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
             </select>
           </label>
         }
+        @if (needsPrnCheckbox()) {
+          <label class="inline">
+            <input
+              type="checkbox"
+              data-test="export-include-prn"
+              [checked]="includePrn()"
+              (change)="toggleIncludePrn($event)"
+            />
+            Include PRN / as-needed medications
+          </label>
+        }
         <button
           class="hl-btn"
           type="button"
@@ -113,6 +124,11 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
       display: block;
       margin: 0.35rem 0;
     }
+    label.inline {
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+    }
   `,
 })
 export class ExportPage {
@@ -125,6 +141,7 @@ export class ExportPage {
   readonly category = signal('');
   readonly formCode = signal('');
   readonly exportSubject = signal('');
+  readonly includePrn = signal(false);
   startDate = '';
   endDate = '';
   selectedIds = new Set<string>();
@@ -195,6 +212,10 @@ export class ExportPage {
     );
   }
 
+  needsPrnCheckbox(): boolean {
+    return this.formCode() === 'ar_dcfs_weekly_med_chart';
+  }
+
   needsMembers(): boolean {
     return this.needsMemberCheckboxes();
   }
@@ -211,7 +232,10 @@ export class ExportPage {
       );
     }
     if (this.formCode() === 'ar_dcfs_weekly_med_chart') {
-      return 'Choose a date range and children. Home Logs fills a CFS-372 chart for each week that has doses.';
+      return (
+        'Choose a date range and children. Home Logs fills a CFS-372 chart for each week ' +
+        'that has scheduled doses. PRN and as-needed medications are left off unless you include them.'
+      );
     }
     if (this.formCode() === 'ar_dcfs_journal_entries') {
       return 'Choose a date range and children. Submitted journal entries fill Date, Time, and Incident.';
@@ -234,6 +258,10 @@ export class ExportPage {
     }
   }
 
+  toggleIncludePrn(event: Event): void {
+    this.includePrn.set((event.target as HTMLInputElement).checked);
+  }
+
   async download(): Promise<void> {
     if (!this.formCode()) {
       this.error.set('Choose a form to export.');
@@ -252,6 +280,7 @@ export class ExportPage {
           start_date: this.startDate,
           end_date: this.endDate,
           member_ids: this.memberIds(),
+          ...(this.needsPrnCheckbox() ? { include_prn: this.includePrn() } : {}),
         }),
       );
       const url = URL.createObjectURL(blob);

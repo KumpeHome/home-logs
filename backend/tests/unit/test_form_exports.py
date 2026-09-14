@@ -602,6 +602,91 @@ def test_export_weekly_med_chart_groups_doses_by_week(client) -> None:
     assert "JK" in text
 
 
+def _give_med(
+    client, household_id: str, child_id: str, medication_id: str, name: str
+) -> None:
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 19, 13, 15, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": medication_id,
+                "medication_name": name,
+                "quantity_given": 1,
+                "outcome": "given",
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+
+
+def _weekly_chart_with_scheduled_and_prn(client) -> tuple[str, str]:
+    household_id, child_id, med_id = _med_child(client)
+    prn_id = client.post(
+        f"/api/households/{household_id}/members/{child_id}/medications",
+        json={
+            "name": "Melatonin",
+            "dose": "1tablet",
+            "route": "oral",
+            "frequency": "as needed",
+            "schedule_times": [],
+            "is_prn": True,
+        },
+    ).json()["id"]
+    otc_id = client.post(
+        f"/api/households/{household_id}/otc-medications",
+        json={
+            "name": "Ibuprofen",
+            "dose": "200mg",
+            "route": "oral",
+            "instructions": "As needed for pain",
+        },
+    ).json()["id"]
+    _give_med(client, household_id, child_id, med_id, "Cetirizine")
+    _give_med(client, household_id, child_id, prn_id, "Melatonin")
+    _give_med(client, household_id, child_id, otc_id, "Ibuprofen")
+    return household_id, child_id
+
+
+def _export_weekly_med_chart(
+    client, household_id: str, child_id: str, *, include_prn: bool = False
+):
+    payload = {
+        "form_code": "ar_dcfs_weekly_med_chart",
+        "start_date": "2026-08-16",
+        "end_date": "2026-08-22",
+        "member_ids": [child_id],
+    }
+    if include_prn:
+        payload["include_prn"] = True
+    return client.post(f"/api/households/{household_id}/form-exports", json=payload)
+
+
+def test_export_weekly_med_chart_omits_prn_and_as_needed_by_default(client) -> None:
+    household_id, child_id = _weekly_chart_with_scheduled_and_prn(client)
+    response = _export_weekly_med_chart(client, household_id, child_id)
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Cetirizine" in text
+    assert "Melatonin" not in text
+    assert "Ibuprofen" not in text
+
+
+def test_export_weekly_med_chart_includes_prn_when_requested(client) -> None:
+    household_id, child_id = _weekly_chart_with_scheduled_and_prn(client)
+    response = _export_weekly_med_chart(
+        client, household_id, child_id, include_prn=True
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Cetirizine" in text
+    assert "Melatonin" in text
+    assert "Ibuprofen" in text
+
+
 def test_export_weekly_med_chart_embeds_drawn_initials(client) -> None:
     household_id, child_id, med_id = _med_child(client)
     created = client.post(

@@ -308,6 +308,7 @@ class FormExportRequest(BaseModel):
     start_date: date
     end_date: date
     member_ids: list[str] = Field(default_factory=list)
+    include_prn: bool = False
 
 
 class DocumentIn(BaseModel):

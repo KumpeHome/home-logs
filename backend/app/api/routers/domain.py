@@ -475,6 +475,7 @@ def create_form_export(
         data.start_date,
         data.end_date,
         data.member_ids,
+        include_prn=data.include_prn,
     )
     return Response(
         content=content,

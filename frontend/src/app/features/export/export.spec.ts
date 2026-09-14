@@ -115,6 +115,7 @@ describe('ExportPage', () => {
     page.formCode.set('ar_dcfs_weekly_med_chart');
     fixture.detectChanges();
     expect(host.querySelector('[data-test="export-member"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="export-include-prn"]')).toBeTruthy();
     page.formCode.set('ar_dcfs_journal_entries');
     fixture.detectChanges();
     expect(host.querySelector('[data-test="export-member"]')).toBeTruthy();
@@ -139,6 +140,33 @@ describe('ExportPage', () => {
     expect(posted.body.start_date).toBe('2026-08-01');
     expect(posted.body.end_date).toBe('2026-08-31');
     expect(posted.body.member_ids).toContain('m1');
+  });
+
+  it('omits PRN from the weekly chart unless the include checkbox is checked', async () => {
+    const fixture = TestBed.createComponent(ExportPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    const host = fixture.nativeElement as HTMLElement;
+    page.formCode.set('ar_dcfs_medication_log');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="export-include-prn"]')).toBeNull();
+    page.formCode.set('ar_dcfs_weekly_med_chart');
+    fixture.detectChanges();
+    const checkbox = host.querySelector('[data-test="export-include-prn"]') as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox.checked).toBe(false);
+    expect(host.textContent).toMatch(/include PRN/i);
+    page.startDate = '2026-08-16';
+    page.endDate = '2026-08-22';
+    await page.download();
+    expect(posted.body.form_code).toBe('ar_dcfs_weekly_med_chart');
+    expect(posted.body.include_prn).toBe(false);
+    checkbox.click();
+    fixture.detectChanges();
+    await page.download();
+    expect(posted.body.include_prn).toBe(true);
   });
 
   it('omits member filters when downloading fire/tornado drills', async () => {
