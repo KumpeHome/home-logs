@@ -347,4 +347,71 @@ describe('FormViewPage', () => {
       'attachments could not be loaded',
     );
   });
+
+  it('lets you edit a submitted behavior form', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [FormViewPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([
+          { path: 'forms/:id', component: FormViewPage },
+          { path: 'discipline', component: FormViewPage },
+        ]),
+        {
+          provide: ActivatedRoute,
+          useValue: { snapshot: { paramMap: convertToParamMap({ id: 'log-b' }) } },
+        },
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: (path: string) => {
+              if (path === '/form-types') {
+                return of([
+                  {
+                    code: 'behavior',
+                    name: 'Behavior',
+                    schema: {
+                      properties: {
+                        antecedent: { title: 'What was going on beforehand' },
+                        behavior: { title: 'What happened' },
+                      },
+                    },
+                  },
+                ]);
+              }
+              if (path.endsWith('/logs/log-b')) {
+                return of({
+                  id: 'log-b',
+                  form_type_code: 'behavior',
+                  form_name: 'Behavior',
+                  occurred_at: '2026-08-19T15:04:00',
+                  status: 'submitted',
+                  subject_name: 'Jordan Lee',
+                  payload: {
+                    antecedent: 'Asked to do homework',
+                    behavior: 'Threw pencil',
+                  },
+                });
+              }
+              return of([]);
+            },
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(FormViewPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const host = fixture.nativeElement as HTMLElement;
+    expect(host.textContent).toContain('What happened');
+    expect(host.textContent).toContain('Threw pencil');
+    const edit = host.querySelector('[data-test="edit-behavior-form"]') as HTMLAnchorElement;
+    expect(edit).toBeTruthy();
+    expect(edit.getAttribute('href')).toContain('/discipline');
+    expect(edit.getAttribute('href')).toContain('edit=log-b');
+  });
 });

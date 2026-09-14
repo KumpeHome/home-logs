@@ -1,9 +1,16 @@
+import base64
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
+from PIL import Image as PILImage
+from PIL import ImageDraw
 from pypdf import PdfReader
+from reportlab.lib.units import inch
+from reportlab.pdfbase.pdfmetrics import stringWidth
+from reportlab.platypus import Image
 
-from app.exports.ar_dcfs_forms import journal_entries_pdf
+from app.exports.ar_dcfs_forms import journal_entries_pdf, weekly_med_chart_pdf
+from app.exports.pdfs import initials_cell, wrap_text_lines
 
 
 def _household(client) -> str:
@@ -630,6 +637,97 @@ def test_export_weekly_med_chart_embeds_drawn_initials(client) -> None:
     assert "data:image" not in _pdf_text(response.content)
 
 
+def test_export_weekly_med_chart_reuses_recorder_drawn_initials(client) -> None:
+    household_id, child_id, med_id = _med_child(client)
+    prn_id = client.post(
+        f"/api/households/{household_id}/members/{child_id}/medications",
+        json={
+            "name": "Melatonin",
+            "dose": "1tablet",
+            "route": "oral",
+            "frequency": "as needed",
+            "schedule_times": [],
+            "is_prn": True,
+        },
+    ).json()["id"]
+    first = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 21, 2, 20, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": prn_id,
+                "quantity_given": 1,
+                "outcome": "given",
+            },
+        },
+    )
+    assert first.status_code == 201, first.text
+    second = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 21, 2, 21, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "quantity_given": 1,
+                "outcome": "given",
+                "fp_initials": TINY_PNG,
+            },
+        },
+    )
+    assert second.status_code == 201, second.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_weekly_med_chart",
+            "start_date": "2026-08-16",
+            "end_date": "2026-08-22",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "AA" not in text
+    assert b"/XObject" in response.content
+    assert "data:image" not in text
+
+
+def _stroke_initials_png() -> str:
+    image = PILImage.new("RGBA", (240, 90), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(image)
+    draw.line((90, 35, 150, 55), fill=(26, 31, 36, 255), width=3)
+    buffer = BytesIO()
+    image.save(buffer, format="PNG")
+    encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    return f"data:image/png;base64,{encoded}"
+
+
+def test_initials_cell_flattens_and_upscales_drawn_initials() -> None:
+    cell = initials_cell(_stroke_initials_png(), width=0.55 * inch, height=0.20 * inch)
+    assert isinstance(cell, Image)
+    assert cell._mask is None
+    assert cell.imageWidth >= 160
+    assert cell.imageHeight >= 48
+
+
+def test_weekly_med_chart_pdf_is_crisp_vector_not_a_page_photo() -> None:
+    pdf = weekly_med_chart_pdf([("", "", "", [])])
+    page = PdfReader(BytesIO(pdf)).pages[0]
+    stream = page.get_contents().get_data()
+    assert "Weekly Medication Chart" in (page.extract_text() or "")
+    assert b"/SMask" not in pdf
+    assert b"/DCTDecode" not in pdf
+    assert b".4 w" not in stream
+    assert b"1 w" in stream
+    assert b"/F2 7 Tf" not in stream
+    assert b"/F2 8 Tf" in stream
+
+
 def test_export_journal_entries_pdf_includes_child_and_incident(client) -> None:
     household_id = _household(client)
     child_id = client.post(
@@ -783,6 +881,39 @@ def test_journal_entries_word_wraps_long_incident_onto_extra_rows() -> None:
     text = _pdf_text(pdf)
     for index in range(80):
         assert f"WrapToken{index:02d}" in text
+    first = pages[0].extract_text() or ""
+    second = pages[1].extract_text() or ""
+    assert "Short journal note 7 unique." in second
+    assert "Short journal note 7 unique." not in first
+
+
+def test_wrap_text_lines_splits_word_wider_than_width() -> None:
+    token = "https://example.example/" + ("very-long-path-segment/" * 8)
+    width = 80.0
+    assert stringWidth(token, "Helvetica", 9) > width
+    lines = wrap_text_lines(token, width, font_name="Helvetica", font_size=9)
+    assert len(lines) > 1
+    assert "".join(lines) == token
+    for line in lines:
+        assert line
+        assert stringWidth(line, "Helvetica", 9) <= width
+
+
+def test_journal_entries_splits_oversized_token_onto_extra_rows() -> None:
+    token = "A" * 400
+    rows = [("2026-08-01", "4:30 PM", token)]
+    rows.extend(
+        (
+            f"2026-08-{index + 2:02d}",
+            "4:30 PM",
+            f"Short journal note {index + 1} unique.",
+        )
+        for index in range(7)
+    )
+    pdf = journal_entries_pdf([("Casey Child", rows)])
+    pages = PdfReader(BytesIO(pdf)).pages
+    assert len(pages) >= 2
+    assert "A" * 20 in (_pdf_text(pdf) or "").replace("\n", "").replace(" ", "")
     first = pages[0].extract_text() or ""
     second = pages[1].extract_text() or ""
     assert "Short journal note 7 unique." in second

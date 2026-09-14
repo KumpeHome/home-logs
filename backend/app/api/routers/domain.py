@@ -59,6 +59,7 @@ from app.services.operations import (
     EducationService,
     ExportService,
     LogService,
+    serialize_discipline,
     serialize_log,
     serialize_medication,
     serialize_member,
@@ -493,6 +494,8 @@ def create_log(
     recorder = service.require_membership(household_id, user)
     PermissionService(db).require_form(household_id, user, data.form_type_code, "add")
     entry = LogService(db).create(household_id, data, user, recorder)
+    if data.form_type_code == "behavior":
+        DisciplineService(db).attach_from_log(household_id, entry)
     return serialize_log(entry, db)
 
 
@@ -704,7 +707,7 @@ def create_discipline(
     recorder = service.require_membership(household_id, user)
     PermissionService(db).require(household_id, user, "tab.discipline", "add")
     record = DisciplineService(db).create(household_id, data, user, recorder)
-    return {"id": record.id, "log_entry_id": record.log_entry_id}
+    return serialize_discipline(record)
 
 
 @more_router.get("/households/{household_id}/discipline")
@@ -718,23 +721,35 @@ def list_discipline(
     service.require_membership(household_id, user)
     PermissionService(db).require(household_id, user, "tab.discipline", "view")
     records = DisciplineService(db).list(household_id, member_id)
-    return [
-        {
-            "id": item.id,
-            "member_id": item.member_id,
-            "occurred_at": item.occurred_at.isoformat(),
-            "location": item.location,
-            "antecedent": item.antecedent,
-            "behavior": item.behavior,
-            "intervention": item.intervention,
-            "consequence": item.consequence,
-            "duration_minutes": item.duration_minutes,
-            "follow_up": item.follow_up,
-            "notified": item.notified,
-            "log_entry_id": item.log_entry_id,
-        }
-        for item in records
-    ]
+    return [serialize_discipline(item) for item in records]
+
+
+@more_router.get("/households/{household_id}/discipline/{record_id}")
+def get_discipline(
+    household_id: str,
+    record_id: str,
+    user: Annotated[AuthUser, Depends(require_scopes(DISCIPLINE_READ))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    service.require_membership(household_id, user)
+    PermissionService(db).require(household_id, user, "tab.discipline", "view")
+    return serialize_discipline(DisciplineService(db).get(household_id, record_id))
+
+
+@more_router.patch("/households/{household_id}/discipline/{record_id}")
+def update_discipline(
+    household_id: str,
+    record_id: str,
+    data: DisciplineIn,
+    user: Annotated[AuthUser, Depends(require_scopes(DISCIPLINE_WRITE))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    recorder = service.require_membership(household_id, user)
+    PermissionService(db).require(household_id, user, "tab.discipline", "edit")
+    record = DisciplineService(db).update(household_id, record_id, data, user, recorder)
+    return serialize_discipline(record)
 
 
 @more_router.post("/households/{household_id}/enrollments", status_code=201)

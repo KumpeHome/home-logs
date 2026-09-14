@@ -211,6 +211,41 @@ describe('LogsPage medication administration', () => {
     expect(host.querySelector('[data-test="form-success"]')?.textContent).toContain('saved');
     expect(page.mar.notes).toBe('');
   });
+
+  it('keeps drawn initials after recording so the next dose can reuse them', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [LogsPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            ...apiMock,
+            timezone: () => 'America/Chicago',
+            post: () => of({ id: 'log-1' }),
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(LogsPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const page = fixture.componentInstance;
+    page.formCode = 'medication_administration';
+    page.memberId = 'm1';
+    page.start();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    page.mar.fp_initials = 'data:image/png;base64,fp';
+    page.mar.notes = 'With food';
+    page.saveMar();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    expect(page.mar.notes).toBe('');
+    expect(page.mar.fp_initials).toBe('data:image/png;base64,fp');
+  });
 });
 
 describe('LogsPage journal photos', () => {

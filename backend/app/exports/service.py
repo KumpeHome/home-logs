@@ -210,6 +210,7 @@ class OfficialExportService:
         self, entries: list[LogEntry], selected: list[str], tz_name: str
     ) -> list[tuple[str, list[tuple[str, str, str, str, str, str]]]]:
         pages: list[tuple[str, list[tuple]]] = []
+        stamps = _recorder_drawings(entries)
         for member_id in selected:
             child = _member_name(self.db, member_id)
             rows: list[tuple] = []
@@ -218,8 +219,6 @@ class OfficialExportService:
                     continue
                 if entry.payload.get("outcome") not in (None, "", "given"):
                     continue
-                caregiver = _member_name(self.db, entry.recorded_by_id)
-                drawn_fp = str(entry.payload.get("fp_initials") or "").strip()
                 drawn_fc = str(entry.payload.get("fc_initials") or "").strip()
                 rows.append(
                     (
@@ -227,7 +226,7 @@ class OfficialExportService:
                         str(entry.payload.get("dose_given") or ""),
                         local_date(entry.occurred_at, tz_name).isoformat(),
                         local_time_hm(entry.occurred_at, tz_name),
-                        initials_cell(drawn_fp) if drawn_fp else _initials(caregiver),
+                        initials_cell(_fp_initial_value(entry, self.db, stamps)),
                         initials_cell(drawn_fc) if drawn_fc else "",
                     )
                 )
@@ -238,6 +237,7 @@ class OfficialExportService:
         self, entries: list[LogEntry], selected: list[str], tz_name: str
     ) -> list[tuple[str, str, str, list[dict]]]:
         pages: list[tuple[str, str, str, list[dict]]] = []
+        stamps = _recorder_drawings(entries)
         for member_id in selected:
             weeks: dict[date, dict[str, dict]] = {}
             for entry in sorted(entries, key=lambda item: item.occurred_at):
@@ -260,7 +260,7 @@ class OfficialExportService:
                         "days": {},
                     },
                 )
-                initial = _dose_initial(entry, self.db)
+                initial = _fp_initial_value(entry, self.db, stamps)
                 day_index = (day.weekday() + 1) % 7
                 med["days"].setdefault(day_index, []).append(
                     (local_time_hm(entry.occurred_at, tz_name), initial)
@@ -390,8 +390,23 @@ def _slash_date(day: date) -> str:
     return day.strftime("%m/%d/%y")
 
 
-def _dose_initial(entry: LogEntry, db: Session) -> str:
+def _recorder_drawings(entries: list[LogEntry]) -> dict[str, str]:
+    stamps: dict[str, str] = {}
+    for entry in entries:
+        drawn = str(entry.payload.get("fp_initials") or "").strip()
+        recorder = str(entry.recorded_by_id or "")
+        if recorder and drawn.startswith("data:image"):
+            stamps[recorder] = drawn
+    return stamps
+
+
+def _fp_initial_value(entry: LogEntry, db: Session, stamps: dict[str, str]) -> str:
     drawn = str(entry.payload.get("fp_initials") or "").strip()
+    if drawn.startswith("data:image"):
+        return drawn
+    stamp = stamps.get(str(entry.recorded_by_id or ""))
+    if stamp:
+        return stamp
     if drawn:
         return drawn
     return _initials(_member_name(db, entry.recorded_by_id))

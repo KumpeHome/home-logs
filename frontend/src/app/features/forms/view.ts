@@ -3,6 +3,7 @@ import { DatePipe } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { catchError, forkJoin, of, firstValueFrom } from 'rxjs';
 import { ApiService } from '../../core/api.service';
+import { AuthService } from '../../core/auth.service';
 import { NamedMember, SubmissionField, submissionFields } from '../../shared/log-display';
 
 type LogAttachment = { id: string; filename: string; content_type: string };
@@ -17,6 +18,7 @@ type PhotoView = LogAttachment & { url: string };
 export class FormViewPage implements OnDestroy {
   private readonly api = inject(ApiService);
   private readonly route = inject(ActivatedRoute);
+  private readonly auth = inject(AuthService);
   readonly log = signal<any>(null);
   readonly fields = signal<SubmissionField[]>([]);
   readonly photos = signal<PhotoView[]>([]);
@@ -26,6 +28,15 @@ export class FormViewPage implements OnDestroy {
 
   timezone(): string {
     return this.api.timezone();
+  }
+
+  canEditBehavior(): boolean {
+    const entry = this.log();
+    return (
+      entry?.form_type_code === 'behavior' &&
+      entry?.status === 'submitted' &&
+      this.auth.can('tab.discipline', 'edit')
+    );
   }
 
   constructor() {

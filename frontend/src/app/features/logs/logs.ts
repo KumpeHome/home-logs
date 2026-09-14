@@ -360,8 +360,12 @@ export class LogsPage {
   private resetSavedForm(): void {
     this.formRenderer()?.reset();
     if (this.selected()?.code === 'medication_administration') {
+      const fp = String(this.mar.fp_initials || '');
+      const fc = String(this.mar.fc_initials || '');
       this.mar = this.emptyMar();
       this.mar.medication_id = this.meds()[0]?.id ?? '';
+      this.mar.fp_initials = fp;
+      this.mar.fc_initials = fc;
     }
   }
 
