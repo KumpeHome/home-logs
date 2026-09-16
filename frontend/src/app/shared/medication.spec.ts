@@ -1,20 +1,34 @@
-import { administerableChoices, flagLabel, isAdministerable, MEDICATION_FLAGS } from './medication';
+import {
+  administerableChoices,
+  flagLabel,
+  isAdministerable,
+  MEDICATION_FLAGS,
+  needsRefill,
+  optionalQuantity,
+  stockLabel,
+} from './medication';
 
 describe('medication helpers', () => {
   it('hides meds outside their start and end dates', () => {
     expect(
-      isAdministerable({
-        active: true,
-        start_date: '2026-01-01',
-        end_date: '2026-01-31',
-      }, '2026-08-19'),
+      isAdministerable(
+        {
+          active: true,
+          start_date: '2026-01-01',
+          end_date: '2026-01-31',
+        },
+        '2026-08-19',
+      ),
     ).toBe(false);
     expect(
-      isAdministerable({
-        active: true,
-        start_date: '2026-01-01',
-        end_date: null,
-      }, '2026-08-19'),
+      isAdministerable(
+        {
+          active: true,
+          start_date: '2026-01-01',
+          end_date: null,
+        },
+        '2026-08-19',
+      ),
     ).toBe(true);
   });
 
@@ -27,10 +41,9 @@ describe('medication helpers', () => {
   });
 
   it('includes household cabinet OTCs that are not assigned to the member', () => {
-    const rows = administerableChoices(
-      { medications: [], otc_medications: [] },
-      [{ id: 'otc1', name: 'Acetaminophen', dose: '325mg', active: true }],
-    );
+    const rows = administerableChoices({ medications: [], otc_medications: [] }, [
+      { id: 'otc1', name: 'Acetaminophen', dose: '325mg', active: true },
+    ]);
     expect(rows.map((item) => item.name)).toContain('Acetaminophen');
     expect(rows[0].id).toBe('otc1');
     expect(rows[0].is_otc).toBe(true);
@@ -56,5 +69,16 @@ describe('medication helpers', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].id).toBe('as1');
     expect(rows[0].dose).toBe('500mg');
+  });
+
+  it('flags a refill when on-hand count is at or below the reminder level', () => {
+    expect(needsRefill({ quantity_on_hand: 8, refill_reminder_level: 10 })).toBe(true);
+    expect(needsRefill({ quantity_on_hand: 10, refill_reminder_level: 10 })).toBe(true);
+    expect(needsRefill({ quantity_on_hand: 11, refill_reminder_level: 10 })).toBe(false);
+    expect(needsRefill({ quantity_on_hand: null, refill_reminder_level: 10 })).toBe(false);
+    expect(stockLabel({ quantity_on_hand: 8 })).toBe('8 on hand');
+    expect(stockLabel({ quantity_on_hand: null })).toBeNull();
+    expect(optionalQuantity('')).toBeNull();
+    expect(optionalQuantity('12')).toBe(12);
   });
 });

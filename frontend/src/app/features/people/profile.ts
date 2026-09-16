@@ -7,7 +7,14 @@ import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { MemberPhoto } from '../../shared/member-photo';
 import { composeDose, DOSE_UNITS, parseDose } from '../../shared/dose';
-import { flagLabel, isAdministerable, MEDICATION_FLAGS } from '../../shared/medication';
+import {
+  flagLabel,
+  isAdministerable,
+  MEDICATION_FLAGS,
+  needsRefill,
+  optionalQuantity,
+  stockLabel,
+} from '../../shared/medication';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
 import { FormStatus } from '../../shared/form-status';
 import { FormAction } from '../../shared/form-action';
@@ -236,6 +243,32 @@ export class ProfilePage {
     });
   }
 
+  recordRefill(med: { id: string }): void {
+    if (this.medAction.busy()) {
+      return;
+    }
+    this.medAction.run(
+      this.api.post(
+        `/households/${this.api.hid()}/members/${this.memberId()}/medications/${med.id}/refill`,
+        {},
+      ),
+      'Refill recorded.',
+      () => this.refresh(this.memberId()),
+    );
+  }
+
+  stockText(med: { quantity_on_hand?: number | null }): string | null {
+    return stockLabel(med);
+  }
+
+  lowStock(med: {
+    quantity_on_hand?: number | null;
+    refill_reminder_level?: number | null;
+    needs_refill?: boolean;
+  }): boolean {
+    return med.needs_refill === true || needsRefill(med);
+  }
+
   startEditMed(med: any): void {
     const parsed = parseDose(med.dose);
     this.med = {
@@ -361,7 +394,7 @@ export class ProfilePage {
   }
 
   private medPayload(payload: any): any {
-    const { dose_amount, dose_unit, ...rest } = payload;
+    const { dose_amount, dose_unit, id: _id, needs_refill: _needs, ...rest } = payload;
     return {
       ...rest,
       dose: composeDose(dose_amount, dose_unit),
@@ -375,6 +408,13 @@ export class ProfilePage {
       diagnosis: payload.diagnosis || null,
       instructions: payload.instructions || null,
       prescriber: payload.prescriber || null,
+      quantity_on_hand: optionalQuantity(payload.quantity_on_hand),
+      refill_quantity: optionalQuantity(payload.refill_quantity),
+      refill_reminder_level: optionalQuantity(payload.refill_reminder_level),
+      refills_remaining: optionalQuantity(payload.refills_remaining),
+      pharmacy: payload.pharmacy || null,
+      rx_number: payload.rx_number || null,
+      last_refill_on: payload.last_refill_on || null,
     };
   }
 
@@ -395,6 +435,13 @@ export class ProfilePage {
       hold_reason: '',
       active: true,
       flags: [] as string[],
+      quantity_on_hand: '',
+      refill_quantity: '',
+      refill_reminder_level: '',
+      refills_remaining: '',
+      pharmacy: '',
+      rx_number: '',
+      last_refill_on: '',
     };
   }
   private emptyAllergy() {

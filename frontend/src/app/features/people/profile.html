@@ -333,12 +333,49 @@
                 <dt>Hold reason</dt>
                 <dd>{{ show(medItem.hold_reason) }}</dd>
               </div>
+              <div>
+                <dt>On hand</dt>
+                <dd>{{ stockText(medItem) || '—' }}</dd>
+              </div>
+              <div>
+                <dt>Refill when at</dt>
+                <dd>
+                  {{
+                    medItem.refill_reminder_level != null
+                      ? 'Refill at ' + medItem.refill_reminder_level
+                      : '—'
+                  }}
+                </dd>
+              </div>
+              <div>
+                <dt>Refill amount</dt>
+                <dd>{{ show(medItem.refill_quantity) }}</dd>
+              </div>
+              <div>
+                <dt>Refills left</dt>
+                <dd>{{ show(medItem.refills_remaining) }}</dd>
+              </div>
+              <div>
+                <dt>Pharmacy</dt>
+                <dd>{{ show(medItem.pharmacy) }}</dd>
+              </div>
+              <div>
+                <dt>Rx number</dt>
+                <dd>{{ show(medItem.rx_number) }}</dd>
+              </div>
+              <div>
+                <dt>Last refill</dt>
+                <dd>{{ show(medItem.last_refill_on) }}</dd>
+              </div>
               <div class="span">
                 <dt>Instructions</dt>
                 <dd>{{ show(medItem.instructions) }}</dd>
               </div>
             </dl>
             <div class="flag-row">
+              @if (lowStock(medItem)) {
+                <span class="hl-pill inactive" data-test="refill-needed">Needs refill</span>
+              }
               @for (code of medItem.flags ?? []; track code) {
                 <span class="hl-pill pending">{{ flagName(code) }}</span>
               }
@@ -352,6 +389,17 @@
               >
                 Edit
               </button>
+              @if (medItem.refill_quantity) {
+                <button
+                  class="hl-btn secondary"
+                  type="button"
+                  data-test="record-refill"
+                  [disabled]="medAction.busy()"
+                  (click)="recordRefill(medItem)"
+                >
+                  Record refill
+                </button>
+              }
               <button
                 class="hl-btn secondary"
                 type="button"
@@ -416,6 +464,58 @@
             <input type="date" [(ngModel)]="med.end_date" name="mend" data-test="med-end-date"
           /></label>
           <label>Hold reason <input [(ngModel)]="med.hold_reason" name="mhold" /></label>
+          <fieldset>
+            <legend>Inventory</legend>
+            <label
+              >Pills / units on hand
+              <input
+                type="number"
+                min="0"
+                step="any"
+                [(ngModel)]="med.quantity_on_hand"
+                name="mqty"
+                data-test="med-quantity-on-hand"
+              />
+            </label>
+            <label
+              >Amount per refill
+              <input
+                type="number"
+                min="0"
+                step="any"
+                [(ngModel)]="med.refill_quantity"
+                name="mrefillqty"
+                data-test="med-refill-quantity"
+              />
+            </label>
+            <label
+              >Remind when at or below
+              <input
+                type="number"
+                min="0"
+                step="any"
+                [(ngModel)]="med.refill_reminder_level"
+                name="mrefilllevel"
+                data-test="med-refill-level"
+              />
+            </label>
+            <label
+              >Refills remaining
+              <input
+                type="number"
+                min="0"
+                step="1"
+                [(ngModel)]="med.refills_remaining"
+                name="mrefillsleft"
+              />
+            </label>
+            <label>Pharmacy <input [(ngModel)]="med.pharmacy" name="mpharm" /></label>
+            <label>Rx number <input [(ngModel)]="med.rx_number" name="mrx" /></label>
+            <label
+              >Last refill
+              <input type="date" [(ngModel)]="med.last_refill_on" name="mlastrefill" />
+            </label>
+          </fieldset>
           <label
             >Instructions <textarea [(ngModel)]="med.instructions" name="mins"></textarea>
           </label>

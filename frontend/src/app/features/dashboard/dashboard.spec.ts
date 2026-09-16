@@ -16,6 +16,7 @@ const apiMock = {
       inactive_members: 0,
       drafts: 0,
       meds_due: [],
+      refills_needed: [],
       recent_logs: [],
     }),
   post: () => of({ id: 'h1' }),
@@ -60,5 +61,62 @@ describe('DashboardPage', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('No medications need attention right now.');
     expect(text).toContain('No recent records yet.');
+  });
+});
+
+describe('DashboardPage refill reminders', () => {
+  it('lists medications that are at the refill reminder level', async () => {
+    await TestBed.resetTestingModule();
+    await TestBed.configureTestingModule({
+      imports: [DashboardPage],
+      providers: [
+        provideHttpClient(),
+        provideRouter([]),
+        {
+          provide: ApiService,
+          useValue: {
+            hid: () => 'h1',
+            timezone: () => 'America/Chicago',
+            get: () =>
+              of({
+                active_members: 1,
+                inactive_members: 0,
+                drafts: 0,
+                meds_due: [],
+                refills_needed: [
+                  {
+                    member_id: 'm1',
+                    member_name: 'Sam Kid',
+                    medication_id: 'med1',
+                    medication_name: 'Sertraline',
+                    quantity_on_hand: 6,
+                    refill_reminder_level: 10,
+                    is_otc: false,
+                  },
+                ],
+                recent_logs: [],
+              }),
+            post: () => of({ id: 'h1' }),
+          },
+        },
+        {
+          provide: AuthService,
+          useValue: {
+            householdId: signal('h1'),
+            me: signal({ name: 'Sam Kumpe', email: 'sam@example.com' }),
+            can: () => true,
+          },
+        },
+      ],
+    }).compileComponents();
+    const fixture = TestBed.createComponent(DashboardPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('Refills needed');
+    expect(text).toContain('Sertraline');
+    expect(text).toContain('Sam Kid');
+    expect(text).toContain('6 on hand');
   });
 });

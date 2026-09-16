@@ -7,7 +7,12 @@ import { FormRenderer } from '../../shared/form-renderer';
 import { ApiService } from '../../core/api.service';
 import { AuthService } from '../../core/auth.service';
 import { InitialsPad } from '../../shared/initials-pad';
-import { administerableChoices, flagLabel, type AdministerableMed } from '../../shared/medication';
+import {
+  administerableChoices,
+  flagLabel,
+  stockLabel,
+  type AdministerableMed,
+} from '../../shared/medication';
 import { FormAction, formErrorMessage } from '../../shared/form-action';
 import { FormStatus } from '../../shared/form-status';
 import { PHOTO_ACCEPT, preparePhoto } from '../../shared/prepare-photo';
@@ -51,7 +56,12 @@ import { DocumentInput } from '../../shared/document-input';
             }
           </select>
         </label>
-        <button class="hl-btn" type="submit" data-test="log-continue" [disabled]="formAction.busy()">
+        <button
+          class="hl-btn"
+          type="submit"
+          data-test="log-continue"
+          [disabled]="formAction.busy()"
+        >
           Continue
         </button>
       </form>
@@ -71,6 +81,9 @@ import { DocumentInput } from '../../shared/document-input';
                     {{ med.name }} {{ med.dose }}
                     @if (med.is_otc) {
                       (OTC)
+                    }
+                    @if (stockText(med); as stock) {
+                      — {{ stock }}
                     }
                   </option>
                 }
@@ -416,6 +429,10 @@ export class LogsPage {
 
   flagName(code: string): string {
     return flagLabel(code);
+  }
+
+  stockText(med: AdministerableMed): string | null {
+    return stockLabel(med);
   }
 
   timezone(): string {

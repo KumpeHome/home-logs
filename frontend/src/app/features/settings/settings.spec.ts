@@ -18,7 +18,15 @@ const apiMock = {
     }
     if (path.includes('/otc-medications')) {
       return of([
-        { id: 'o1', name: 'Acetaminophen', dose: '325mg', route: 'oral', instructions: 'Fever' },
+        {
+          id: 'o1',
+          name: 'Acetaminophen',
+          dose: '325mg',
+          route: 'oral',
+          instructions: 'Fever',
+          quantity_on_hand: 12,
+          refill_reminder_level: 8,
+        },
       ]);
     }
     return of([]);
@@ -49,8 +57,11 @@ describe('SettingsPage', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Medicine cabinet');
     expect(text).toContain('Acetaminophen');
+    expect(text).toContain('12 on hand');
     expect(fixture.nativeElement.querySelector('[data-test="add-otc"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-test="otc-dose-amount"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-test="otc-quantity-on-hand"]')).toBeTruthy();
+    expect(fixture.nativeElement.querySelector('[data-test="otc-refill-level"]')).toBeTruthy();
     expect(fixture.nativeElement.querySelector('[data-test="otc-dose-unit"]')).toBeTruthy();
     const units = Array.from(
       fixture.nativeElement.querySelectorAll('[data-test="otc-dose-unit"] option'),

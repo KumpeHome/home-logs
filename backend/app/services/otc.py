@@ -16,8 +16,15 @@ from app.schemas import (
     HouseholdOtcMedicationIn,
     HouseholdOtcMedicationUpdate,
     MemberOtcAssignmentIn,
+    RefillIn,
 )
 from app.services.households import HouseholdService, audit
+from app.services.inventory import (
+    fill_stock,
+    inventory_fields,
+    locked_get,
+    requested_refill_quantity,
+)
 from app.services.med_rules import is_administerable
 
 
@@ -30,6 +37,7 @@ def serialize_otc(item: HouseholdOtcMedication) -> dict:
         "route": item.route,
         "instructions": item.instructions,
         "active": item.active,
+        **inventory_fields(item),
     }
 
 
@@ -44,6 +52,7 @@ def serialize_assignment(item: MemberOtcAssignment) -> dict:
         "instructions": item.instructions or otc.instructions,
         "active": item.active and otc.active,
         "is_otc": True,
+        **inventory_fields(otc),
     }
 
 
@@ -80,9 +89,17 @@ class OtcService:
         return item
 
     def get_catalog_item(
-        self, household_id: str, otc_id: str
+        self,
+        household_id: str,
+        otc_id: str,
+        *,
+        for_update: bool = False,
     ) -> HouseholdOtcMedication:
-        item = self.db.get(HouseholdOtcMedication, otc_id)
+        item = (
+            locked_get(self.db, HouseholdOtcMedication, otc_id)
+            if for_update
+            else self.db.get(HouseholdOtcMedication, otc_id)
+        )
         if item is None or item.household_id != household_id:
             raise DomainError("OTC medication not found", 404)
         return item
@@ -106,6 +123,27 @@ class OtcService:
             entity_type="otc_medication",
             entity_id=item.id,
             summary=f"Updated household OTC {item.name}",
+        )
+        return item
+
+    def refill_catalog(
+        self, household_id: str, otc_id: str, data: RefillIn, actor
+    ) -> HouseholdOtcMedication:
+        item = self.get_catalog_item(household_id, otc_id, for_update=True)
+        fill_stock(
+            item,
+            refill_quantity=requested_refill_quantity(item, data.quantity),
+            filled_on=data.filled_on or date.today(),
+        )
+        audit(
+            self.db,
+            household_id=household_id,
+            actor_subject=actor.subject,
+            actor_email=actor.email,
+            action="refill",
+            entity_type="otc_medication",
+            entity_id=item.id,
+            summary=f"Recorded refill for household OTC {item.name}",
         )
         return item
 

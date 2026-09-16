@@ -23,10 +23,13 @@ import { timeOfDayGreeting } from '../../shared/greeting';
     @if (!auth.householdId()) {
       <section class="hl-card">
         <h2>Welcome in</h2>
-        <p class="lede">Start with a household name. You can invite people and add records after this.</p>
+        <p class="lede">
+          Start with a household name. You can invite people and add records after this.
+        </p>
         <form class="hl-form" (ngSubmit)="createHome()">
           <label>Household name <input [(ngModel)]="homeName" name="hname" /></label>
-          <label>Type
+          <label
+            >Type
             <select [(ngModel)]="homeType" name="htype">
               <option value="family">Family</option>
               <option value="foster">Foster</option>
@@ -78,6 +81,29 @@ import { timeOfDayGreeting } from '../../shared/greeting';
         }
       </section>
       <section class="hl-card">
+        <h2>Refills needed</h2>
+        @for (med of dash.refills_needed ?? []; track med.medication_id) {
+          <div class="attention-item">
+            <div>
+              <strong>{{ med.member_name }}</strong>
+              <p class="muted">{{ med.medication_name }} · {{ med.quantity_on_hand }} on hand</p>
+            </div>
+            @if (med.member_id) {
+              <a class="hl-btn secondary" [routerLink]="['/people', med.member_id]">Profile</a>
+            } @else {
+              <span class="hl-pill pending">OTC</span>
+            }
+          </div>
+        } @empty {
+          <div class="empty">
+            <strong>No refills are due.</strong>
+            <span
+              >Set a refill reminder level on a medication to see it here when stock runs low.</span
+            >
+          </div>
+        }
+      </section>
+      <section class="hl-card">
         <div class="head">
           <h2>Recent records</h2>
           <a class="hl-btn secondary" routerLink="/forms">Browse submitted</a>
@@ -85,13 +111,21 @@ import { timeOfDayGreeting } from '../../shared/greeting';
         @if (dash.recent_logs?.length) {
           <div class="table-wrap">
             <table>
-              <tr><th>When</th><th>Form</th><th>Who</th><th>Status</th><th></th></tr>
+              <tr>
+                <th>When</th>
+                <th>Form</th>
+                <th>Who</th>
+                <th>Status</th>
+                <th></th>
+              </tr>
               @for (log of dash.recent_logs; track log.id) {
                 <tr>
-                  <td>{{ log.occurred_at | date: 'short':timezone() }}</td>
+                  <td>{{ log.occurred_at | date: 'short' : timezone() }}</td>
                   <td>{{ log.form_name }}</td>
                   <td>{{ log.subject_name || 'Household' }}</td>
-                  <td><span class="hl-pill active">{{ log.status }}</span></td>
+                  <td>
+                    <span class="hl-pill active">{{ log.status }}</span>
+                  </td>
                   <td><a class="hl-btn secondary" [routerLink]="['/forms', log.id]">View</a></td>
                 </tr>
               }
@@ -107,9 +141,16 @@ import { timeOfDayGreeting } from '../../shared/greeting';
     }
   `,
   styles: `
-    .stats { grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); margin-bottom: 1rem; }
-    .attention-item { margin-bottom: 0.65rem; }
-    .attention-item p { margin: 0.2rem 0 0; }
+    .stats {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      margin-bottom: 1rem;
+    }
+    .attention-item {
+      margin-bottom: 0.65rem;
+    }
+    .attention-item p {
+      margin: 0.2rem 0 0;
+    }
   `,
 })
 export class DashboardPage {

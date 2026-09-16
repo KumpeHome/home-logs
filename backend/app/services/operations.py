@@ -19,6 +19,7 @@ from app.models import (
     Document,
     Household,
     HouseholdMember,
+    HouseholdOtcMedication,
     LogAttachment,
     LogEntry,
     Medication,
@@ -31,8 +32,17 @@ from app.models import (
 from app.schemas import DisciplineIn, EnrollmentIn, GradeIn, LogAmend, LogCreate
 from app.services.dose import administered_dose
 from app.services.households import HouseholdService, audit, legal_name
+from app.services.inventory import (
+    consume_administered_dose,
+    needs_refill,
+    prescription_fields,
+)
 from app.services.med_rules import is_administerable
-from app.services.otc import resolve_administered_medication, serialize_assignment
+from app.services.otc import (
+    OtcService,
+    resolve_administered_medication,
+    serialize_assignment,
+)
 from app.services.timezones import (
     iso_utc,
     local_date,
@@ -105,6 +115,12 @@ class LogService:
         )
         self.db.add(entry)
         self.db.flush()
+        consume_administered_dose(
+            self.db,
+            household_id,
+            entry.payload,
+            submitted=entry.status == "submitted",
+        )
         audit(
             self.db,
             household_id=household_id,
@@ -225,7 +241,12 @@ class LogService:
 
     def submit(self, household_id: str, log_id: str, actor) -> LogEntry:
         entry = self.get(household_id, log_id)
+        already_submitted = entry.status == "submitted"
         entry.status = "submitted"
+        if not already_submitted:
+            consume_administered_dose(
+                self.db, household_id, entry.payload, submitted=True
+            )
         audit(
             self.db,
             household_id=household_id,
@@ -1054,10 +1075,68 @@ class DashboardService:
             "inactive_members": len(inactive),
             "drafts": len(drafts),
             "meds_due": meds_due,
+            "refills_needed": _refills_needed(self.db, household_id, active),
             "recent_logs": [serialize_log(entry, self.db) for entry in recent],
             "upcoming": visits,
             "members": [serialize_member(m) for m in active],
         }
+
+
+def _refills_needed(
+    db: Session, household_id: str, active: list[HouseholdMember]
+) -> list[dict]:
+    rows: list[dict] = []
+    for member in active:
+        profile = member.profile
+        if not profile:
+            continue
+        for med in profile.medications:
+            if med.active and needs_refill(
+                quantity_on_hand=med.quantity_on_hand,
+                refill_reminder_level=med.refill_reminder_level,
+            ):
+                rows.append(
+                    _refill_alert(
+                        member_id=member.id,
+                        member_name=legal_name(profile),
+                        item=med,
+                        is_otc=False,
+                    )
+                )
+    for otc in OtcService(db).list_catalog(household_id):
+        if otc.active and needs_refill(
+            quantity_on_hand=otc.quantity_on_hand,
+            refill_reminder_level=otc.refill_reminder_level,
+        ):
+            rows.append(
+                _refill_alert(
+                    member_id=None,
+                    member_name="Household",
+                    item=otc,
+                    is_otc=True,
+                )
+            )
+    return rows
+
+
+def _refill_alert(
+    *,
+    member_id: str | None,
+    member_name: str,
+    item: Medication | HouseholdOtcMedication,
+    is_otc: bool,
+) -> dict:
+    return {
+        "member_id": member_id,
+        "member_name": member_name,
+        "medication_id": item.id,
+        "medication_name": item.name,
+        "quantity_on_hand": item.quantity_on_hand,
+        "refill_reminder_level": item.refill_reminder_level,
+        "refills_remaining": getattr(item, "refills_remaining", None),
+        "pharmacy": getattr(item, "pharmacy", None),
+        "is_otc": is_otc,
+    }
 
 
 def serialize_medication(item: Medication) -> dict:
@@ -1078,6 +1157,7 @@ def serialize_medication(item: Medication) -> dict:
         "hold_reason": item.hold_reason,
         "active": item.active,
         "flags": list(item.flags or []),
+        **prescription_fields(item),
     }
 
 
