@@ -24,3 +24,25 @@ def test_mariadb_creates_core_tables() -> None:
     assert "household_otc_medications" in names
     assert "member_otc_assignments" in names
     assert "member_permissions" in names
+    med_cols = {item["name"] for item in inspect(engine).get_columns("medications")}
+    otc_cols = {
+        item["name"]
+        for item in inspect(engine).get_columns("household_otc_medications")
+    }
+    for column in (
+        "quantity_on_hand",
+        "refill_quantity",
+        "refill_reminder_level",
+        "refills_remaining",
+        "pharmacy",
+        "rx_number",
+        "last_refill_on",
+    ):
+        assert column in med_cols
+    for column in (
+        "quantity_on_hand",
+        "refill_quantity",
+        "refill_reminder_level",
+        "last_refill_on",
+    ):
+        assert column in otc_cols

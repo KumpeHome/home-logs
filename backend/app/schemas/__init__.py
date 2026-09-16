@@ -111,7 +111,19 @@ class AllergyIn(BaseModel):
     verified_on: date | None = None
 
 
-class MedicationIn(BaseModel):
+class InventoryFields(BaseModel):
+    quantity_on_hand: float | None = Field(default=None, ge=0)
+    refill_quantity: float | None = Field(default=None, ge=0)
+    refill_reminder_level: float | None = Field(default=None, ge=0)
+    last_refill_on: date | None = None
+
+
+class RefillIn(BaseModel):
+    quantity: float | None = Field(default=None, gt=0)
+    filled_on: date | None = None
+
+
+class MedicationIn(InventoryFields):
     name: str
     dose: str
     route: str
@@ -127,6 +139,9 @@ class MedicationIn(BaseModel):
     hold_reason: str | None = None
     active: bool = True
     flags: list[str] = Field(default_factory=list)
+    pharmacy: str | None = None
+    rx_number: str | None = None
+    refills_remaining: int | None = Field(default=None, ge=0)
 
     @field_validator("flags")
     @classmethod
@@ -150,6 +165,13 @@ class MedicationUpdate(BaseModel):
     hold_reason: str | None = None
     active: bool | None = None
     flags: list[str] | None = None
+    quantity_on_hand: float | None = Field(default=None, ge=0)
+    refill_quantity: float | None = Field(default=None, ge=0)
+    refill_reminder_level: float | None = Field(default=None, ge=0)
+    last_refill_on: date | None = None
+    pharmacy: str | None = None
+    rx_number: str | None = None
+    refills_remaining: int | None = Field(default=None, ge=0)
 
     @field_validator("flags")
     @classmethod
@@ -159,7 +181,7 @@ class MedicationUpdate(BaseModel):
         return normalize_med_flags(value)
 
 
-class HouseholdOtcMedicationIn(BaseModel):
+class HouseholdOtcMedicationIn(InventoryFields):
     name: str
     dose: str
     route: str = "oral"
@@ -173,6 +195,10 @@ class HouseholdOtcMedicationUpdate(BaseModel):
     route: str | None = None
     instructions: str | None = None
     active: bool | None = None
+    quantity_on_hand: float | None = Field(default=None, ge=0)
+    refill_quantity: float | None = Field(default=None, ge=0)
+    refill_reminder_level: float | None = Field(default=None, ge=0)
+    last_refill_on: date | None = None
 
 
 class MemberOtcAssignmentIn(BaseModel):

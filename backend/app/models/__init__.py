@@ -7,6 +7,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -26,6 +27,13 @@ def _uuid() -> str:
 
 def utcnow() -> datetime:
     return datetime.now(UTC).replace(tzinfo=None)
+
+
+class InventoryColumns:
+    quantity_on_hand: Mapped[float | None] = mapped_column(Float, nullable=True)
+    refill_quantity: Mapped[float | None] = mapped_column(Float, nullable=True)
+    refill_reminder_level: Mapped[float | None] = mapped_column(Float, nullable=True)
+    last_refill_on: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
 class Household(Base):
@@ -181,7 +189,7 @@ class Allergy(Base):
     profile: Mapped[PersonProfile] = orm_rel(back_populates="allergies")
 
 
-class Medication(Base):
+class Medication(InventoryColumns, Base):
     __tablename__ = "medications"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
@@ -203,11 +211,14 @@ class Medication(Base):
     hold_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     flags: Mapped[list] = mapped_column(JSON, default=list)
+    pharmacy: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    rx_number: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    refills_remaining: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
     profile: Mapped[PersonProfile] = orm_rel(back_populates="medications")
 
 
-class HouseholdOtcMedication(Base):
+class HouseholdOtcMedication(InventoryColumns, Base):
     __tablename__ = "household_otc_medications"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)

@@ -20,8 +20,9 @@ from app.models import (
     PersonProfile,
     ProfessionalContact,
 )
-from app.schemas import HouseholdCreate, MemberCreate, ProfileUpdate
+from app.schemas import HouseholdCreate, MemberCreate, ProfileUpdate, RefillIn
 from app.services.identity import link_first_login, normalize_email
+from app.services.inventory import fill_stock, locked_get, requested_refill_quantity
 
 
 def _now() -> datetime:
@@ -439,6 +440,35 @@ class ProfileService:
             entity_id=item_id,
             summary=f"Removed {collection} item",
         )
+
+    def refill_medication(
+        self,
+        household_id: str,
+        member_id: str,
+        item_id: str,
+        data: RefillIn,
+        actor,
+    ) -> Medication:
+        profile = self.get_profile(household_id, member_id)
+        item = locked_get(self.db, Medication, item_id)
+        if item is None or item.profile_id != profile.id:
+            raise DomainError("Medication not found", 404)
+        fill_stock(
+            item,
+            refill_quantity=requested_refill_quantity(item, data.quantity),
+            filled_on=data.filled_on or date.today(),
+        )
+        audit(
+            self.db,
+            household_id=household_id,
+            actor_subject=actor.subject,
+            actor_email=actor.email,
+            action="refill",
+            entity_type="medications",
+            entity_id=item.id,
+            summary=f"Recorded refill for {item.name}",
+        )
+        return item
 
     def set_photo(
         self, household_id: str, member_id: str, path: str, actor

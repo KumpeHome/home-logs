@@ -50,6 +50,14 @@ const PROFILE = {
       hold_reason: null,
       active: true,
       flags: ['drowsy', 'take_with_food'],
+      quantity_on_hand: 8,
+      refill_quantity: 30,
+      refill_reminder_level: 10,
+      refills_remaining: 2,
+      pharmacy: 'Walgreens',
+      rx_number: 'RX-4412',
+      last_refill_on: '2026-08-01',
+      needs_refill: true,
     },
     {
       id: 'med2',
@@ -300,6 +308,38 @@ describe('ProfilePage', () => {
       (option) => option.textContent?.trim(),
     );
     expect(units).toContain('gummy');
+  });
+
+  it('shows pill count, refill reminder, and records a refill', async () => {
+    const fixture = TestBed.createComponent(ProfilePage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const host = fixture.nativeElement as HTMLElement;
+    const healthTab = Array.from(host.querySelectorAll('button')).find((btn) =>
+      btn.textContent?.includes('Health'),
+    );
+    healthTab?.click();
+    fixture.detectChanges();
+    expect(host.textContent).toContain('8 on hand');
+    expect(host.textContent).toContain('Refill at 10');
+    expect(host.textContent).toContain('Walgreens');
+    expect(host.textContent).toContain('RX-4412');
+    expect(host.querySelector('[data-test="refill-needed"]')).toBeTruthy();
+    const refill = host.querySelector('[data-test="record-refill"]') as HTMLButtonElement;
+    expect(refill).toBeTruthy();
+    refill.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+    const call = (apiMock.post.mock.calls as unknown as [string, unknown][]).find(([path]) =>
+      path.includes('/medications/med1/refill'),
+    );
+    expect(call).toBeTruthy();
+    const addMed = host.querySelector('[data-test="add-medications"]') as HTMLButtonElement;
+    addMed.click();
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="med-quantity-on-hand"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="med-refill-quantity"]')).toBeTruthy();
+    expect(host.querySelector('[data-test="med-refill-level"]')).toBeTruthy();
   });
 
   it('lets you view and edit personal belongings on the records tab', async () => {

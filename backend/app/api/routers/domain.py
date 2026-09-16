@@ -50,6 +50,7 @@ from app.schemas import (
     PermissionReplace,
     ProfessionalContactIn,
     ProfileUpdate,
+    RefillIn,
 )
 from app.services.households import HouseholdService, ProfileService
 from app.services.operations import (
@@ -279,6 +280,19 @@ def update_otc_medication(
     return serialize_otc(otc.update_catalog(household_id, otc_id, data, user))
 
 
+@members_router.post("/households/{household_id}/otc-medications/{otc_id}/refill")
+def refill_otc_medication(
+    household_id: str,
+    otc_id: str,
+    data: RefillIn,
+    user: Annotated[AuthUser, Depends(require_scopes(PROFILES_WRITE))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    otc: Annotated[OtcService, Depends(otc_service)],
+) -> dict:
+    service.require_membership(household_id, user)
+    return serialize_otc(otc.refill_catalog(household_id, otc_id, data, user))
+
+
 @members_router.delete(
     "/households/{household_id}/otc-medications/{otc_id}", status_code=204
 )
@@ -422,6 +436,25 @@ def update_nested(
         item_id,
         MedicationUpdate.model_validate(payload),
         user,
+    )
+    return serialize_medication(item)
+
+
+@members_router.post(
+    "/households/{household_id}/members/{member_id}/medications/{item_id}/refill"
+)
+def refill_medication(
+    household_id: str,
+    member_id: str,
+    item_id: str,
+    data: RefillIn,
+    user: Annotated[AuthUser, Depends(require_scopes(PROFILES_WRITE))],
+    service: Annotated[HouseholdService, Depends(household_service)],
+    db: Annotated[Session, Depends(get_db)],
+) -> dict:
+    service.require_membership(household_id, user)
+    item = ProfileService(db).refill_medication(
+        household_id, member_id, item_id, data, user
     )
     return serialize_medication(item)
 

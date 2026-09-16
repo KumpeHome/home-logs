@@ -469,3 +469,264 @@ def test_update_medication_flags_dates_and_reject_expired_mar(client) -> None:
         "window" in expired.json()["detail"].lower()
         or "date" in expired.json()["detail"].lower()
     )
+
+
+def test_medication_tracks_pill_count_and_refill_reminder(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications",
+        json={
+            "name": "Sertraline",
+            "dose": "50mg",
+            "route": "oral",
+            "frequency": "daily",
+            "schedule_times": ["08:00"],
+            "quantity_on_hand": 12,
+            "refill_quantity": 30,
+            "refill_reminder_level": 10,
+            "refills_remaining": 2,
+            "pharmacy": "Walgreens",
+            "rx_number": "RX-4412",
+        },
+    )
+    assert created.status_code == 200, created.text
+    med_id = created.json()["id"]
+    profile = client.get(
+        f"/api/households/{household_id}/members/{member_id}/profile"
+    ).json()
+    med = next(item for item in profile["medications"] if item["id"] == med_id)
+    assert med["quantity_on_hand"] == 12
+    assert med["refill_quantity"] == 30
+    assert med["refill_reminder_level"] == 10
+    assert med["refills_remaining"] == 2
+    assert med["pharmacy"] == "Walgreens"
+    assert med["rx_number"] == "RX-4412"
+    assert med["needs_refill"] is False
+
+    given = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": member_id,
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "quantity_given": 2,
+                "outcome": "given",
+            },
+        },
+    )
+    assert given.status_code == 201, given.text
+    after_dose = client.get(
+        f"/api/households/{household_id}/members/{member_id}/profile"
+    ).json()
+    med = next(item for item in after_dose["medications"] if item["id"] == med_id)
+    assert med["quantity_on_hand"] == 10
+    assert med["needs_refill"] is True
+
+    refused = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": member_id,
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "quantity_given": 1,
+                "outcome": "refused",
+            },
+        },
+    )
+    assert refused.status_code == 201, refused.text
+    after_refuse = client.get(
+        f"/api/households/{household_id}/members/{member_id}/profile"
+    ).json()
+    med = next(item for item in after_refuse["medications"] if item["id"] == med_id)
+    assert med["quantity_on_hand"] == 10
+
+    filled = client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications/{med_id}/refill",
+        json={"filled_on": "2026-09-14"},
+    )
+    assert filled.status_code == 200, filled.text
+    assert filled.json()["quantity_on_hand"] == 40
+    assert filled.json()["refills_remaining"] == 1
+    assert filled.json()["last_refill_on"] == "2026-09-14"
+    assert filled.json()["needs_refill"] is False
+
+    dash = client.get(f"/api/households/{household_id}/dashboard").json()
+    assert dash["refills_needed"] == []
+
+
+def test_draft_mar_does_not_decrement_stock_until_submit(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    med_id = client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications",
+        json={
+            "name": "Cetirizine",
+            "dose": "5mg",
+            "route": "oral",
+            "frequency": "daily",
+            "schedule_times": ["08:00"],
+            "quantity_on_hand": 5,
+            "refill_reminder_level": 2,
+        },
+    ).json()["id"]
+    draft = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": member_id,
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "submit": False,
+            "payload": {
+                "medication_id": med_id,
+                "quantity_given": 1,
+                "outcome": "given",
+            },
+        },
+    )
+    assert draft.status_code == 201, draft.text
+    profile = client.get(
+        f"/api/households/{household_id}/members/{member_id}/profile"
+    ).json()
+    med = next(item for item in profile["medications"] if item["id"] == med_id)
+    assert med["quantity_on_hand"] == 5
+
+    submitted = client.post(
+        f"/api/households/{household_id}/logs/{draft.json()['id']}/submit"
+    )
+    assert submitted.status_code == 200, submitted.text
+    after = client.get(
+        f"/api/households/{household_id}/members/{member_id}/profile"
+    ).json()
+    med = next(item for item in after["medications"] if item["id"] == med_id)
+    assert med["quantity_on_hand"] == 4
+
+
+def test_dashboard_lists_medications_at_refill_level(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications",
+        json={
+            "name": "Adderall",
+            "dose": "10mg",
+            "route": "oral",
+            "frequency": "daily",
+            "schedule_times": ["08:00"],
+            "quantity_on_hand": 6,
+            "refill_reminder_level": 8,
+            "pharmacy": "CVS",
+        },
+    )
+    dash = client.get(f"/api/households/{household_id}/dashboard").json()
+    names = [item["medication_name"] for item in dash["refills_needed"]]
+    assert "Adderall" in names
+    row = next(
+        item for item in dash["refills_needed"] if item["medication_name"] == "Adderall"
+    )
+    assert row["quantity_on_hand"] == 6
+    assert row["refill_reminder_level"] == 8
+    assert row["member_name"] == "Sam Kid"
+    assert row["is_otc"] is False
+
+
+def test_otc_cabinet_tracks_stock_and_refill(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/otc-medications",
+        json={
+            "name": "Ibuprofen",
+            "dose": "200mg",
+            "route": "oral",
+            "quantity_on_hand": 10,
+            "refill_quantity": 50,
+            "refill_reminder_level": 8,
+        },
+    )
+    assert created.status_code == 201, created.text
+    otc_id = created.json()["id"]
+    assert created.json()["quantity_on_hand"] == 10
+    assert created.json()["needs_refill"] is False
+
+    given = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": member_id,
+            "occurred_at": datetime.now(UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": otc_id,
+                "quantity_given": 2,
+                "outcome": "given",
+            },
+        },
+    )
+    assert given.status_code == 201, given.text
+    catalog = client.get(f"/api/households/{household_id}/otc-medications").json()
+    item = next(row for row in catalog if row["id"] == otc_id)
+    assert item["quantity_on_hand"] == 8
+    assert item["needs_refill"] is True
+
+    filled = client.post(
+        f"/api/households/{household_id}/otc-medications/{otc_id}/refill",
+        json={},
+    )
+    assert filled.status_code == 200, filled.text
+    assert filled.json()["quantity_on_hand"] == 58
+    assert filled.json()["needs_refill"] is False
+
+    dash = client.get(f"/api/households/{household_id}/dashboard").json()
+    assert all(row["medication_name"] != "Ibuprofen" for row in dash["refills_needed"])
+
+
+def test_refill_requires_a_refill_quantity(client) -> None:
+    household_id = client.post(
+        "/api/households", json={"name": "Home", "household_type": "family"}
+    ).json()["id"]
+    member_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    med_id = client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications",
+        json={
+            "name": "Melatonin",
+            "dose": "3mg",
+            "route": "oral",
+            "frequency": "nightly",
+            "quantity_on_hand": 4,
+        },
+    ).json()["id"]
+    missing = client.post(
+        f"/api/households/{household_id}/members/{member_id}/medications/{med_id}/refill",
+        json={},
+    )
+    assert missing.status_code == 400

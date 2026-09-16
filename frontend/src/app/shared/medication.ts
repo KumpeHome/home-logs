@@ -30,6 +30,9 @@ export type AdministerableMed = {
   flags?: string[];
   is_otc?: boolean;
   otc_medication_id?: string;
+  quantity_on_hand?: number | null;
+  refill_reminder_level?: number | null;
+  needs_refill?: boolean;
 };
 
 export function isAdministerable(
@@ -67,6 +70,31 @@ export function administerableChoices(
     .filter((item) => item.active !== false && !assignedIds.has(item.id))
     .map((item) => ({ ...item, is_otc: true }));
   return [...prescribed, ...assigned, ...household];
+}
+
+export function needsRefill(med: {
+  quantity_on_hand?: number | null;
+  refill_reminder_level?: number | null;
+}): boolean {
+  if (med.quantity_on_hand == null || med.refill_reminder_level == null) {
+    return false;
+  }
+  return med.quantity_on_hand <= med.refill_reminder_level;
+}
+
+export function stockLabel(med: { quantity_on_hand?: number | null }): string | null {
+  if (med.quantity_on_hand == null) {
+    return null;
+  }
+  return `${med.quantity_on_hand} on hand`;
+}
+
+export function optionalQuantity(value: unknown): number | null {
+  if (value === '' || value === null || value === undefined) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function todayIso(): string {

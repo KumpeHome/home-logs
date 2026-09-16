@@ -30,6 +30,7 @@ const apiMock = {
             start_date: null,
             end_date: null,
             flags: ['drowsy', 'take_with_food'],
+            quantity_on_hand: 8,
           },
           {
             id: 'expired',
@@ -80,6 +81,7 @@ describe('LogsPage medication administration', () => {
     fixture.detectChanges();
     const host = fixture.nativeElement as HTMLElement;
     expect(host.textContent).toContain('Cetirizine');
+    expect(host.textContent).toContain('8 on hand');
     expect(host.textContent).not.toContain('Old Antibiotic');
     expect(host.textContent).toContain('Acetaminophen');
     expect(host.textContent).toContain('(OTC)');

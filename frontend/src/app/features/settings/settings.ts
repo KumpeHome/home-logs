@@ -5,6 +5,7 @@ import { AuthService } from '../../core/auth.service';
 import { composeDose, DOSE_UNITS, parseDose } from '../../shared/dose';
 import { FormAction } from '../../shared/form-action';
 import { FormStatus } from '../../shared/form-status';
+import { needsRefill, optionalQuantity, stockLabel } from '../../shared/medication';
 
 @Component({
   selector: 'hl-settings',
@@ -61,6 +62,12 @@ import { FormStatus } from '../../shared/form-status';
         @for (item of otc(); track item.id) {
           <li>
             {{ item.name }} {{ item.dose }} {{ item.route }}
+            @if (stockText(item); as stock) {
+              <span class="hl-pill pending">{{ stock }}</span>
+            }
+            @if (lowStock(item)) {
+              <span class="hl-pill inactive">Needs refill</span>
+            }
             <button
               class="hl-btn secondary"
               type="button"
@@ -69,6 +76,17 @@ import { FormStatus } from '../../shared/form-status';
             >
               Edit
             </button>
+            @if (item.refill_quantity) {
+              <button
+                class="hl-btn secondary"
+                type="button"
+                data-test="record-otc-refill"
+                [disabled]="otcAction.busy()"
+                (click)="recordOtcRefill(item.id)"
+              >
+                Record refill
+              </button>
+            }
             <button class="hl-btn secondary" type="button" (click)="removeOtc(item.id)">
               Remove
             </button>
@@ -103,6 +121,39 @@ import { FormStatus } from '../../shared/form-status';
         <label>Route <input [(ngModel)]="otcDraft.route" name="otcroute" /></label>
         <label
           >Instructions <textarea [(ngModel)]="otcDraft.instructions" name="otcins"></textarea>
+        </label>
+        <label
+          >Pills / units on hand
+          <input
+            type="number"
+            min="0"
+            step="any"
+            [(ngModel)]="otcDraft.quantity_on_hand"
+            name="otcqty"
+            data-test="otc-quantity-on-hand"
+          />
+        </label>
+        <label
+          >Amount per refill
+          <input
+            type="number"
+            min="0"
+            step="any"
+            [(ngModel)]="otcDraft.refill_quantity"
+            name="otcrefillqty"
+            data-test="otc-refill-quantity"
+          />
+        </label>
+        <label
+          >Remind when at or below
+          <input
+            type="number"
+            min="0"
+            step="any"
+            [(ngModel)]="otcDraft.refill_reminder_level"
+            name="otcrefilllevel"
+            data-test="otc-refill-level"
+          />
         </label>
         <hl-form-status
           [busy]="otcAction.busy()"
@@ -178,6 +229,9 @@ export class SettingsPage {
     dose?: string;
     route?: string;
     instructions?: string;
+    quantity_on_hand?: number | null;
+    refill_quantity?: number | null;
+    refill_reminder_level?: number | null;
   }): void {
     const parsed = parseDose(item.dose);
     this.editingOtcId.set(item.id);
@@ -187,6 +241,9 @@ export class SettingsPage {
       dose_unit: parsed.unit,
       route: item.route || 'oral',
       instructions: item.instructions || '',
+      quantity_on_hand: item.quantity_on_hand ?? '',
+      refill_quantity: item.refill_quantity ?? '',
+      refill_reminder_level: item.refill_reminder_level ?? '',
     };
   }
 
@@ -204,6 +261,9 @@ export class SettingsPage {
       dose: composeDose(this.otcDraft.dose_amount, this.otcDraft.dose_unit),
       route: this.otcDraft.route,
       instructions: this.otcDraft.instructions,
+      quantity_on_hand: optionalQuantity(this.otcDraft.quantity_on_hand),
+      refill_quantity: optionalQuantity(this.otcDraft.refill_quantity),
+      refill_reminder_level: optionalQuantity(this.otcDraft.refill_reminder_level),
     };
     const editId = this.editingOtcId();
     const request = editId
@@ -222,7 +282,39 @@ export class SettingsPage {
       .subscribe(() => this.loadOtc());
   }
 
+  recordOtcRefill(id: string): void {
+    if (this.otcAction.busy()) {
+      return;
+    }
+    this.otcAction.run(
+      this.api.post(`/households/${this.api.hid()}/otc-medications/${id}/refill`, {}),
+      'Refill recorded.',
+      () => this.loadOtc(),
+    );
+  }
+
+  stockText(item: { quantity_on_hand?: number | null }): string | null {
+    return stockLabel(item);
+  }
+
+  lowStock(item: {
+    quantity_on_hand?: number | null;
+    refill_reminder_level?: number | null;
+    needs_refill?: boolean;
+  }): boolean {
+    return item.needs_refill === true || needsRefill(item);
+  }
+
   private emptyOtc() {
-    return { name: '', dose_amount: '1', dose_unit: 'mg', route: 'oral', instructions: '' };
+    return {
+      name: '',
+      dose_amount: '1',
+      dose_unit: 'mg',
+      route: 'oral',
+      instructions: '',
+      quantity_on_hand: '' as string | number,
+      refill_quantity: '' as string | number,
+      refill_reminder_level: '' as string | number,
+    };
   }
 }
