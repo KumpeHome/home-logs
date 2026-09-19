@@ -98,6 +98,7 @@ class OfficialExportService:
         end_date: date,
         member_ids: list[str],
         include_prn: bool = False,
+        exclude_scheduled: bool = False,
     ) -> bytes:
         spec = get_official_export(form_code)
         selected = list(member_ids)
@@ -138,7 +139,11 @@ class OfficialExportService:
             )
         if spec.code == "ar_dcfs_foster_home_log":
             return self._foster_home_log(entries, start_date, tz_name)
-        return medication_log_pdf(self._medication_pages(entries, selected, tz_name))
+        return medication_log_pdf(
+            self._medication_pages(
+                entries, selected, tz_name, exclude_scheduled=exclude_scheduled
+            )
+        )
 
     def _timezone(self, household_id: str) -> str:
         household = self.db.get(Household, household_id)
@@ -210,7 +215,11 @@ class OfficialExportService:
         return rows
 
     def _medication_pages(
-        self, entries: list[LogEntry], selected: list[str], tz_name: str
+        self,
+        entries: list[LogEntry],
+        selected: list[str],
+        tz_name: str,
+        exclude_scheduled: bool = False,
     ) -> list[tuple[str, list[tuple[str, str, str, str, str, str]]]]:
         pages: list[tuple[str, list[tuple]]] = []
         stamps = _recorder_drawings(entries)
@@ -221,6 +230,9 @@ class OfficialExportService:
                 if entry.subject_member_id != member_id:
                     continue
                 if entry.payload.get("outcome") not in (None, "", "given"):
+                    continue
+                med_id = str(entry.payload.get("medication_id") or "")
+                if exclude_scheduled and not self._medication_is_prn(med_id):
                     continue
                 drawn_fc = str(entry.payload.get("fc_initials") or "").strip()
                 rows.append(

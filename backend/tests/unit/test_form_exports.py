@@ -623,7 +623,7 @@ def _give_med(
     assert created.status_code == 201, created.text
 
 
-def _weekly_chart_with_scheduled_and_prn(client) -> tuple[str, str]:
+def _household_with_scheduled_and_prn(client) -> tuple[str, str]:
     household_id, child_id, med_id = _med_child(client)
     prn_id = client.post(
         f"/api/households/{household_id}/members/{child_id}/medications",
@@ -666,7 +666,7 @@ def _export_weekly_med_chart(
 
 
 def test_export_weekly_med_chart_omits_prn_and_as_needed_by_default(client) -> None:
-    household_id, child_id = _weekly_chart_with_scheduled_and_prn(client)
+    household_id, child_id = _household_with_scheduled_and_prn(client)
     response = _export_weekly_med_chart(client, household_id, child_id)
     assert response.status_code == 200, response.text
     text = _pdf_text(response.content)
@@ -676,13 +676,49 @@ def test_export_weekly_med_chart_omits_prn_and_as_needed_by_default(client) -> N
 
 
 def test_export_weekly_med_chart_includes_prn_when_requested(client) -> None:
-    household_id, child_id = _weekly_chart_with_scheduled_and_prn(client)
+    household_id, child_id = _household_with_scheduled_and_prn(client)
     response = _export_weekly_med_chart(
         client, household_id, child_id, include_prn=True
     )
     assert response.status_code == 200, response.text
     text = _pdf_text(response.content)
     assert "Cetirizine" in text
+    assert "Melatonin" in text
+    assert "Ibuprofen" in text
+
+
+def _export_medication_log(
+    client, household_id: str, child_id: str, *, exclude_scheduled: bool = False
+):
+    payload = {
+        "form_code": "ar_dcfs_medication_log",
+        "start_date": "2026-08-01",
+        "end_date": "2026-08-31",
+        "member_ids": [child_id],
+    }
+    if exclude_scheduled:
+        payload["exclude_scheduled"] = True
+    return client.post(f"/api/households/{household_id}/form-exports", json=payload)
+
+
+def test_export_medication_log_includes_scheduled_and_prn_by_default(client) -> None:
+    household_id, child_id = _household_with_scheduled_and_prn(client)
+    response = _export_medication_log(client, household_id, child_id)
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Cetirizine" in text
+    assert "Melatonin" in text
+    assert "Ibuprofen" in text
+
+
+def test_export_medication_log_omits_scheduled_when_requested(client) -> None:
+    household_id, child_id = _household_with_scheduled_and_prn(client)
+    response = _export_medication_log(
+        client, household_id, child_id, exclude_scheduled=True
+    )
+    assert response.status_code == 200, response.text
+    text = _pdf_text(response.content)
+    assert "Cetirizine" not in text
     assert "Melatonin" in text
     assert "Ibuprofen" in text
 
