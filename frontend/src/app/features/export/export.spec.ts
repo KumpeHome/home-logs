@@ -152,6 +152,7 @@ describe('ExportPage', () => {
     page.formCode.set('ar_dcfs_medication_log');
     fixture.detectChanges();
     expect(host.querySelector('[data-test="export-include-prn"]')).toBeNull();
+    expect(host.querySelector('[data-test="export-exclude-scheduled"]')).toBeTruthy();
     page.formCode.set('ar_dcfs_weekly_med_chart');
     fixture.detectChanges();
     const checkbox = host.querySelector('[data-test="export-include-prn"]') as HTMLInputElement;
@@ -167,6 +168,35 @@ describe('ExportPage', () => {
     fixture.detectChanges();
     await page.download();
     expect(posted.body.include_prn).toBe(true);
+  });
+
+  it('omits scheduled meds from the dosage log when the exclude checkbox is checked', async () => {
+    const fixture = TestBed.createComponent(ExportPage);
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+    const page = fixture.componentInstance;
+    const host = fixture.nativeElement as HTMLElement;
+    page.formCode.set('ar_dcfs_weekly_med_chart');
+    fixture.detectChanges();
+    expect(host.querySelector('[data-test="export-exclude-scheduled"]')).toBeNull();
+    page.formCode.set('ar_dcfs_medication_log');
+    fixture.detectChanges();
+    const checkbox = host.querySelector(
+      '[data-test="export-exclude-scheduled"]',
+    ) as HTMLInputElement;
+    expect(checkbox).toBeTruthy();
+    expect(checkbox.checked).toBe(false);
+    expect(host.textContent).toMatch(/exclude scheduled/i);
+    page.startDate = '2026-08-01';
+    page.endDate = '2026-08-31';
+    await page.download();
+    expect(posted.body.form_code).toBe('ar_dcfs_medication_log');
+    expect(posted.body.exclude_scheduled).toBe(false);
+    checkbox.click();
+    fixture.detectChanges();
+    await page.download();
+    expect(posted.body.exclude_scheduled).toBe(true);
   });
 
   it('omits member filters when downloading fire/tornado drills', async () => {

@@ -99,6 +99,17 @@ type ExportMember = { id: string; legal_name: string; household_role?: string };
             Include PRN / as-needed medications
           </label>
         }
+        @if (needsExcludeScheduledCheckbox()) {
+          <label class="inline">
+            <input
+              type="checkbox"
+              data-test="export-exclude-scheduled"
+              [checked]="excludeScheduled()"
+              (change)="toggleExcludeScheduled($event)"
+            />
+            Exclude scheduled medications
+          </label>
+        }
         <button
           class="hl-btn"
           type="button"
@@ -142,6 +153,7 @@ export class ExportPage {
   readonly formCode = signal('');
   readonly exportSubject = signal('');
   readonly includePrn = signal(false);
+  readonly excludeScheduled = signal(false);
   startDate = '';
   endDate = '';
   selectedIds = new Set<string>();
@@ -216,6 +228,10 @@ export class ExportPage {
     return this.formCode() === 'ar_dcfs_weekly_med_chart';
   }
 
+  needsExcludeScheduledCheckbox(): boolean {
+    return this.formCode() === 'ar_dcfs_medication_log';
+  }
+
   needsMembers(): boolean {
     return this.needsMemberCheckboxes();
   }
@@ -235,6 +251,12 @@ export class ExportPage {
       return (
         'Choose a date range and children. Home Logs fills a CFS-372 chart for each week ' +
         'that has scheduled doses. PRN and as-needed medications are left off unless you include them.'
+      );
+    }
+    if (this.formCode() === 'ar_dcfs_medication_log') {
+      return (
+        'Choose a date range and children. Home Logs fills the Medication Dosage Log from given doses. ' +
+        'Scheduled medications are included unless you exclude them.'
       );
     }
     if (this.formCode() === 'ar_dcfs_journal_entries') {
@@ -262,6 +284,10 @@ export class ExportPage {
     this.includePrn.set((event.target as HTMLInputElement).checked);
   }
 
+  toggleExcludeScheduled(event: Event): void {
+    this.excludeScheduled.set((event.target as HTMLInputElement).checked);
+  }
+
   async download(): Promise<void> {
     if (!this.formCode()) {
       this.error.set('Choose a form to export.');
@@ -281,6 +307,9 @@ export class ExportPage {
           end_date: this.endDate,
           member_ids: this.memberIds(),
           ...(this.needsPrnCheckbox() ? { include_prn: this.includePrn() } : {}),
+          ...(this.needsExcludeScheduledCheckbox()
+            ? { exclude_scheduled: this.excludeScheduled() }
+            : {}),
         }),
       );
       const url = URL.createObjectURL(blob);
