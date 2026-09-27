@@ -1,3 +1,5 @@
+import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -7,18 +9,28 @@ from fastapi.responses import FileResponse, JSONResponse
 import app.models  # noqa: F401
 from app.api.routers.core import router as core_router
 from app.api.routers.domain import logs_router, members_router, more_router
+from app.api.routers.notifications import router as notifications_router
 from app.brand import brand_file
 from app.core.config import get_settings
 from app.core.errors import DomainError
 from app.db.schema import ensure_schema
-from app.db.session import engine
+from app.db.session import SessionLocal, engine
+from app.notifications.channels import build_channels
+from app.notifications.dispatch import dispatch_all
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
+    stop_poller = threading.Event()
     if getattr(application.state, "init_db", True):
         ensure_schema(engine)
+        interval = get_settings().notification_poll_seconds
+        if interval > 0:
+            _start_poller(stop_poller, interval)
     yield
+    stop_poller.set()
     if getattr(application.state, "init_db", True):
         engine.dispose()
 
@@ -48,6 +60,7 @@ def create_app(*, init_db: bool = True) -> FastAPI:
     application.include_router(members_router, prefix="/api")
     application.include_router(logs_router, prefix="/api")
     application.include_router(more_router, prefix="/api")
+    application.include_router(notifications_router, prefix="/api")
 
     @application.api_route("/assets/brand/{filename}", methods=["GET", "HEAD"])
     def spa_brand_asset(filename: str) -> FileResponse:
@@ -58,6 +71,22 @@ def create_app(*, init_db: bool = True) -> FastAPI:
         return brand_file("logo.png")
 
     return application
+
+
+def _start_poller(stop: threading.Event, interval: int) -> None:
+    def loop() -> None:
+        while not stop.wait(interval):
+            db = SessionLocal()
+            try:
+                dispatch_all(db, build_channels(get_settings()))
+                db.commit()
+            except Exception:
+                db.rollback()
+                logger.exception("Notification reminders failed")
+            finally:
+                db.close()
+
+    threading.Thread(target=loop, name="notification-poller", daemon=True).start()
 
 
 app = create_app()

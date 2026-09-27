@@ -532,3 +532,70 @@ class AuditEvent(Base):
     entity_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     summary: Mapped[str] = mapped_column(String(512))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True)
+
+
+class NotificationPreference(Base):
+    __tablename__ = "notification_preferences"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    member_id: Mapped[str] = mapped_column(
+        ForeignKey("household_members.id", ondelete="CASCADE"), unique=True, index=True
+    )
+    email_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    pushover_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    pushover_user_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    pushover_key_source: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    pushover_link_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    pushover_link_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
+    dose_lead_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    dose_window_before_minutes: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30"
+    )
+    dose_window_after_minutes: Mapped[int] = mapped_column(
+        Integer, default=60, server_default="60"
+    )
+    dose_repeat_count: Mapped[int] = mapped_column(
+        Integer, default=1, server_default="1"
+    )
+    dose_repeat_interval_minutes: Mapped[int] = mapped_column(
+        Integer, default=15, server_default="15"
+    )
+
+
+class NotificationSubscription(Base):
+    __tablename__ = "notification_subscriptions"
+    __table_args__ = (
+        UniqueConstraint(
+            "member_id", "topic", "subject_member_id", name="uq_notification_sub"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    member_id: Mapped[str] = mapped_column(
+        ForeignKey("household_members.id", ondelete="CASCADE"), index=True
+    )
+    topic: Mapped[str] = mapped_column(String(64))
+    subject_member_id: Mapped[str] = mapped_column(String(36), default="")
+
+
+class NotificationDelivery(Base):
+    __tablename__ = "notification_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "recipient_member_id",
+            "channel",
+            "dedupe_key",
+            name="uq_notification_delivery",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    recipient_member_id: Mapped[str] = mapped_column(
+        ForeignKey("household_members.id", ondelete="CASCADE"), index=True
+    )
+    channel: Mapped[str] = mapped_column(String(32))
+    dedupe_key: Mapped[str] = mapped_column(String(255))
+    topic: Mapped[str] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow)

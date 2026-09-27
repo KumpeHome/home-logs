@@ -14,6 +14,12 @@ _EXTRA_COLUMNS: dict[str, dict[str, str]] = {
         "rx_number": "VARCHAR(64)",
         "last_refill_on": "DATE",
     },
+    "notification_preferences": {
+        "dose_window_before_minutes": "INTEGER NOT NULL DEFAULT 30",
+        "dose_window_after_minutes": "INTEGER NOT NULL DEFAULT 60",
+        "dose_repeat_count": "INTEGER NOT NULL DEFAULT 1",
+        "dose_repeat_interval_minutes": "INTEGER NOT NULL DEFAULT 15",
+    },
     "household_otc_medications": {
         "quantity_on_hand": "FLOAT",
         "refill_quantity": "FLOAT",
