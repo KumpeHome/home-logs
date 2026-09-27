@@ -30,12 +30,15 @@ export class App {
   navGroups(): { name: string; items: { path: string; label: string }[] }[] {
     const names = ['Home', 'Care', 'Records', 'Account'];
     return names
-      .map((name) => ({
-        name,
-        items: this.allNav
+      .map((name) => {
+        const items = this.allNav
           .filter((item) => item.group === name && this.auth.can(item.resource, 'view'))
-          .map(({ path, label }) => ({ path, label })),
-      }))
+          .map(({ path, label }) => ({ path, label }));
+        if (name === 'Account') {
+          items.unshift({ path: '/notifications', label: 'Notifications' });
+        }
+        return { name, items };
+      })
       .filter((group) => group.items.length);
   }
 

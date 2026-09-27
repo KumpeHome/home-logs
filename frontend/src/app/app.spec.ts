@@ -86,6 +86,7 @@ describe('App', () => {
       'Documents',
       'Reports',
       'Activity',
+      'Notifications',
       'Settings',
     ]);
     const navStyle = getComputedStyle(nav);
@@ -110,9 +111,11 @@ describe('App', () => {
     const text = fixture.nativeElement.textContent as string;
     expect(text).toContain('Logs');
     expect(text).toContain('School');
+    expect(text).toContain('Notifications');
     expect(text).toContain('Care');
     expect(text).not.toContain('Behavior');
     expect(text).not.toContain('Documents');
     expect(text).not.toContain('Activity');
+    expect(text).not.toContain('Settings');
   });
 });

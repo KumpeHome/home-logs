@@ -28,6 +28,18 @@ class Settings(BaseSettings):
     auth_bypass_email: str = "dev@homelogs.local"
     auth_bypass_subject: str = "dev-bypass"
 
+    public_app_url: str = "http://localhost:4200"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from: str = ""
+    smtp_starttls: bool = True
+    pushover_api_token: str = ""
+    pushover_subscription_url: str = ""
+    pushover_subscription_code: str = ""
+    notification_poll_seconds: int = 60
+
 
 @lru_cache
 def get_settings() -> Settings:

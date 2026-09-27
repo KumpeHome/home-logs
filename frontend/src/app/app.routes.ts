@@ -14,24 +14,31 @@ import { DisciplinePage } from './features/discipline/discipline';
 import { DocumentsPage } from './features/documents/documents';
 import { ExportPage } from './features/export/export';
 import { SettingsPage } from './features/settings/settings';
+import { NotificationsPage } from './features/notifications/notifications';
 import { AuditPage } from './features/audit/audit';
 
 export const routes: Routes = [
   { path: 'login', component: LoginPage },
   { path: 'callback', component: CallbackPage },
   { path: 'pending', component: PendingPage, canActivate: [authGuard] },
-  { path: '', canActivate: [authGuard], children: [
-    { path: '', component: DashboardPage },
-    { path: 'people', component: PeoplePage },
-    { path: 'people/:id', component: ProfilePage },
-    { path: 'logs', component: LogsPage },
-    { path: 'forms', component: FormsArchivePage },
-    { path: 'forms/:id', component: FormViewPage },
-    { path: 'school', component: SchoolPage },
-    { path: 'discipline', component: DisciplinePage },
-    { path: 'documents', component: DocumentsPage },
-    { path: 'export', component: ExportPage },
-    { path: 'settings', component: SettingsPage },
-    { path: 'audit', component: AuditPage },
-  ]},
+  {
+    path: '',
+    canActivate: [authGuard],
+    children: [
+      { path: '', component: DashboardPage },
+      { path: 'people', component: PeoplePage },
+      { path: 'people/:id', component: ProfilePage },
+      { path: 'logs', component: LogsPage },
+      { path: 'forms', component: FormsArchivePage },
+      { path: 'forms/:id', component: FormViewPage },
+      { path: 'school', component: SchoolPage },
+      { path: 'discipline', component: DisciplinePage },
+      { path: 'documents', component: DocumentsPage },
+      { path: 'export', component: ExportPage },
+      { path: 'settings', component: SettingsPage },
+      { path: 'notifications', component: NotificationsPage },
+      { path: 'notifications/pushover', component: NotificationsPage },
+      { path: 'audit', component: AuditPage },
+    ],
+  },
 ];
