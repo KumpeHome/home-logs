@@ -11,7 +11,7 @@ from pypdf.errors import PdfReadError, PdfStreamError
 from pypdf.generic import NameObject
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import landscape, letter
-from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.pdfgen import canvas
@@ -259,6 +259,13 @@ def quarterly_drills_pdf(rows: list[tuple[str, str, str]]) -> bytes:
     return buffer.getvalue()
 
 
+def _medication_name_cell(value: object, style: ParagraphStyle) -> Paragraph | str:
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    return Paragraph(paragraph_text(text).replace("\n", "<br/>"), style)
+
+
 def medication_log_pdf(
     pages: list[tuple[str, list[tuple[Any, ...]]]],
 ) -> bytes:
@@ -272,6 +279,12 @@ def medication_log_pdf(
         bottomMargin=0.5 * inch,
     )
     styles = _styles()
+    name_style = ParagraphStyle(
+        "MedicationName",
+        fontName="Helvetica",
+        fontSize=9,
+        leading=11,
+    )
     story: list = []
     if not pages:
         pages = [("", [])]
@@ -297,7 +310,10 @@ def medication_log_pdf(
             ]
         ]
         if rows:
-            data.extend([list(row) for row in rows])
+            for row in rows:
+                cells = list(row)
+                cells[0] = _medication_name_cell(cells[0], name_style)
+                data.append(cells)
         else:
             data.append(["", "", "", "", "", ""])
         table = Table(
