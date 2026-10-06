@@ -185,6 +185,78 @@ def test_export_medication_log_pdf_includes_child_name_and_dose(client) -> None:
     assert "5mg" in text
 
 
+def _shown_text_runs(content: bytes) -> list[tuple[str, float, float]]:
+    runs: list[tuple[str, float, float]] = []
+
+    def visitor(text, _cm, tm, _font, font_size) -> None:
+        cleaned = text.replace("\n", "").strip()
+        if cleaned:
+            runs.append((cleaned, float(tm[4]), float(font_size or 9)))
+
+    for page in PdfReader(BytesIO(content)).pages:
+        page.extract_text(visitor_text=visitor)
+    return runs
+
+
+def test_export_medication_log_name_is_only_the_name_and_wraps(client) -> None:
+    household_id = _household(client)
+    child_id = client.post(
+        f"/api/households/{household_id}/members",
+        json={"household_role": "child", "first_name": "Sam", "last_name": "Kid"},
+    ).json()["id"]
+    name = "Chlorpheniramine Maleate Extended Release Tablets"
+    notes = "Shake well and give with food"
+    med_id = client.post(
+        f"/api/households/{household_id}/members/{child_id}/medications",
+        json={
+            "name": name,
+            "dose": "5mg",
+            "route": "oral",
+            "frequency": "daily",
+            "instructions": notes,
+            "schedule_times": ["08:00"],
+        },
+    ).json()["id"]
+    created = client.post(
+        f"/api/households/{household_id}/logs",
+        json={
+            "form_type_code": "medication_administration",
+            "subject_member_id": child_id,
+            "occurred_at": datetime(2026, 8, 20, 8, 15, tzinfo=UTC).isoformat(),
+            "submit": True,
+            "payload": {
+                "medication_id": med_id,
+                "quantity_given": 1,
+                "outcome": "given",
+                "notes": notes,
+            },
+        },
+    )
+    assert created.status_code == 201, created.text
+    response = client.post(
+        f"/api/households/{household_id}/form-exports",
+        json={
+            "form_code": "ar_dcfs_medication_log",
+            "start_date": "2026-08-01",
+            "end_date": "2026-08-31",
+            "member_ids": [child_id],
+        },
+    )
+    assert response.status_code == 200, response.text
+    text = " ".join(_pdf_text(response.content).split())
+    assert name in text
+    assert notes not in text
+    name_runs = [
+        (shown, x, size)
+        for shown, x, size in _shown_text_runs(response.content)
+        if shown in name
+    ]
+    assert len(name_runs) >= 2
+    column_right = 1.5 * inch
+    for shown, x, size in name_runs:
+        assert x + stringWidth(shown, "Helvetica", size) <= column_right
+
+
 def test_export_medication_log_multiplies_unit_dose_by_number_given(client) -> None:
     household_id = _household(client)
     child_id = client.post(
