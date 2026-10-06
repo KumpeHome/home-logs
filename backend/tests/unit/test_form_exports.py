@@ -1,7 +1,9 @@
 import base64
+import re
 from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
+import pytest
 from PIL import Image as PILImage
 from PIL import ImageDraw
 from pypdf import PdfReader
@@ -9,8 +11,15 @@ from reportlab.lib.units import inch
 from reportlab.pdfbase.pdfmetrics import stringWidth
 from reportlab.platypus import Image
 
+from app.core.errors import DomainError
 from app.exports.ar_dcfs_forms import journal_entries_pdf, weekly_med_chart_pdf
-from app.exports.pdfs import initials_cell, wrap_text_lines
+from app.exports.pdfs import (
+    CFS400_TEMPLATE,
+    _cfs400_notes_capacity,
+    initials_cell,
+    sibling_contact_pdf,
+    wrap_text_lines,
+)
 
 
 def _household(client) -> str:
@@ -521,6 +530,244 @@ def test_export_sibling_contact_only_includes_selected_child(client) -> None:
     assert "Casey science fair call." in text
     assert "Sam soccer recap." not in text
     assert "Riley Jones" not in text
+
+
+def _cfs400_data_row_rects() -> list[list[list[float]]]:
+    """Data-row cell rectangles from the CFS-400 template, top to bottom."""
+    page = PdfReader(CFS400_TEMPLATE).pages[0]
+    by_row: dict[int, list[tuple[float, list[float]]]] = {}
+    for annot in page.get("/Annots") or []:
+        obj = annot.get_object()
+        name = str(obj.get("/T") or "")
+        if not name.endswith(tuple(f"Row{index}" for index in range(1, 6))):
+            continue
+        rect = [float(value) for value in obj["/Rect"]]
+        by_row.setdefault(int(name[-1]), []).append((rect[0], rect))
+    field_rows = [[rect for _x, rect in sorted(by_row[index])] for index in range(1, 6)]
+    first = field_rows[0]
+    height = first[0][3] - first[0][1]
+    gap = first[0][1] - field_rows[1][0][3]
+    lifted = [
+        [rect[0], rect[3] + gap, rect[2], rect[3] + gap + height] for rect in first
+    ]
+    return [lifted, *field_rows]
+
+
+def _page_text_items(page) -> list[tuple[float, float, str]]:
+    items: list[tuple[float, float, str]] = []
+
+    def visit(text, _cm, tm, _font_dict, _font_size) -> None:
+        raw = (text or "").replace("\n", "").strip()
+        if raw:
+            items.append((float(tm[4]), float(tm[5]), raw))
+
+    page.extract_text(visitor_text=visit)
+    return items
+
+
+def _cell_containing(
+    rects: list[list[list[float]]], x: float, y: float, text: str
+) -> tuple[int, int] | None:
+    end_x = x + stringWidth(text, "Helvetica", 8)
+    for row_index, row in enumerate(rects):
+        for col_index, (x0, y0, x1, y1) in enumerate(row):
+            if x0 <= x and end_x <= x1 + 1 and y0 <= y <= y1:
+                return row_index, col_index
+    return None
+
+
+def _cell_text(
+    items: list[tuple[float, float, str]],
+    rects: list[list[list[float]]],
+    row: int,
+    col: int,
+) -> str:
+    x0, y0, x1, y1 = rects[row][col]
+    parts = [text for x, y, text in items if x0 <= x <= x1 and y0 <= y <= y1]
+    return " ".join(parts)
+
+
+def _note_token_placements(pdf: bytes, token_prefix: str) -> list[tuple[int, int, int]]:
+    rects = _cfs400_data_row_rects()
+    pattern = re.compile(rf"{token_prefix}(\d+)")
+    placements: list[tuple[int, int, int, float, float]] = []
+    for page_index, page in enumerate(PdfReader(BytesIO(pdf)).pages):
+        for x, y, text in _page_text_items(page):
+            if token_prefix not in text:
+                continue
+            cell = _cell_containing(rects, x, y, text)
+            assert cell is not None, f"{text!r} at ({x:.1f}, {y:.1f}) is outside a cell"
+            row, col = cell
+            assert col == len(rects[row]) - 1, f"{text!r} is not in the notes column"
+            placements.extend(
+                (page_index, row, int(match.group(1)), y, x)
+                for match in pattern.finditer(text)
+            )
+    placements.sort(key=lambda item: (item[0], item[1], -item[3], item[4]))
+    return [(page, row, token) for page, row, token, _y, _x in placements]
+
+
+def _assert_tokens_continue_in_order(
+    placements: list[tuple[int, int, int]], count: int
+) -> None:
+    assert [token for _page, _row, token in placements] == list(range(count))
+    for previous, current in zip(placements, placements[1:], strict=False):
+        prev_page, prev_row, prev_token = previous
+        page, row, token = current
+        assert token == prev_token + 1
+        if page == prev_page:
+            assert row == prev_row or row == prev_row + 1
+            continue
+        assert page == prev_page + 1
+        assert row == 0
+        assert prev_row == len(_cfs400_data_row_rects()) - 1
+
+
+def test_sibling_contact_notes_overflow_into_the_next_row() -> None:
+    long_notes = " ".join(f"NoteToken{index:02d}" for index in range(40))
+    rows = [
+        (
+            "08-19-26 @ 4:30 p.m.-5:00 p.m.",
+            "Casey Child, Johnny Smith",
+            "Phone call",
+            long_notes,
+        ),
+        (
+            "08-20-26 @ 4:30 p.m.-5:00 p.m.",
+            "Casey Child, Riley Jones",
+            "Text",
+            "Short follow-up contact unique.",
+        ),
+    ]
+    pdf = sibling_contact_pdf("Kumpe Home / FP-1234", rows)
+    pages = list(PdfReader(BytesIO(pdf)).pages)
+    rects = _cfs400_data_row_rects()
+    placements = _note_token_placements(pdf, "NoteToken")
+    _assert_tokens_continue_in_order(placements, 40)
+    assert {(page, row) for page, row, _token in placements} == {(0, 0), (0, 1)}
+    assert [token for page, row, token in placements if row == 0] == list(range(20))
+    assert [token for page, row, token in placements if row == 1] == list(range(20, 40))
+    first_page = _page_text_items(pages[0])
+    assert "08-19-26 @ 4:30 p.m.-5:00 p.m." in _cell_text(first_page, rects, 0, 0)
+    assert "Casey Child, Johnny Smith" in _cell_text(first_page, rects, 0, 1)
+    assert "Phone call" in _cell_text(first_page, rects, 0, 2)
+    for col in range(3):
+        assert _cell_text(first_page, rects, 1, col) == ""
+    follow_row = next(
+        row
+        for row in range(len(rects))
+        if "Short follow-up contact unique." in _cell_text(first_page, rects, row, 3)
+    )
+    assert follow_row == 2
+    assert "08-20-26 @ 4:30 p.m.-5:00 p.m." in _cell_text(
+        first_page, rects, follow_row, 0
+    )
+    assert "Text" in _cell_text(first_page, rects, follow_row, 2)
+    assert "NoteToken" not in _cell_text(first_page, rects, follow_row, 3)
+
+
+def test_sibling_contact_note_overflow_continues_on_the_next_page() -> None:
+    long_notes = " ".join(f"SpillToken{index:02d}" for index in range(160))
+    rows = [
+        (
+            "08-19-26 @ 4:30 p.m.-5:00 p.m.",
+            "Casey Child",
+            "Phone call",
+            long_notes,
+        ),
+        (
+            "08-20-26 @ 4:30 p.m.-5:00 p.m.",
+            "Casey Child, Riley Jones",
+            "Text",
+            "Later sibling contact unique.",
+        ),
+    ]
+    pdf = sibling_contact_pdf("Kumpe Home / FP-1234", rows)
+    pages = list(PdfReader(BytesIO(pdf)).pages)
+    rects = _cfs400_data_row_rects()
+    placements = _note_token_placements(pdf, "SpillToken")
+    _assert_tokens_continue_in_order(placements, 160)
+    assert {page for page, _row, _token in placements} == {0, 1}
+    assert {row for page, row, _token in placements if page == 0} == set(range(6))
+    page_break = next(
+        (previous, current)
+        for previous, current in zip(placements, placements[1:], strict=False)
+        if previous[0] != current[0]
+    )
+    assert page_break[0][2] + 1 == page_break[1][2]
+    assert page_break[1] == (1, 0, page_break[1][2])
+    page_items = [_page_text_items(page) for page in pages]
+    origin = next((page, row) for page, row, token in placements if token == 0)
+    assert origin == (0, 0)
+    assert "08-19-26 @ 4:30 p.m.-5:00 p.m." in _cell_text(page_items[0], rects, 0, 0)
+    assert "Phone call" in _cell_text(page_items[0], rects, 0, 2)
+    occupied = {(page, row) for page, row, _token in placements}
+    for page, row in occupied - {origin}:
+        for col in range(3):
+            assert _cell_text(page_items[page], rects, row, col) == ""
+    follow_row = next(
+        row
+        for row in range(len(rects))
+        if "Later sibling contact unique." in _cell_text(page_items[1], rects, row, 3)
+    )
+    assert follow_row > max(row for page, row, _token in placements if page == 1)
+    assert "08-20-26 @ 4:30 p.m.-5:00 p.m." in _cell_text(
+        page_items[1], rects, follow_row, 0
+    )
+    assert "SpillToken" not in _cell_text(page_items[1], rects, follow_row, 3)
+    assert "Later sibling contact unique." not in (pages[0].extract_text() or "")
+
+
+def test_sibling_contact_note_at_the_row_limit_still_exports() -> None:
+    _width, lines_per_row = _cfs400_notes_capacity()
+    line_count = 18 * lines_per_row
+    notes = "\n".join(f"FitLine{index:03d}" for index in range(line_count))
+    pdf = sibling_contact_pdf(
+        "Kumpe Home / FP-1234",
+        [("08-19-26 @ 4:30 p.m.-5:00 p.m.", "Casey Child", "Phone call", notes)],
+    )
+    pages = PdfReader(BytesIO(pdf)).pages
+    assert len(pages) == 3
+    text = "".join(page.extract_text() or "" for page in pages)
+    assert "FitLine000" in text
+    assert f"FitLine{line_count - 1:03d}" in text
+    assert text.count("08-19-26 @ 4:30 p.m.-5:00 p.m.") == 1
+
+
+def test_oversized_sibling_contact_note_is_rejected_before_wrapping(
+    monkeypatch,
+) -> None:
+    def guard(text: str, *args, **kwargs) -> list[str]:
+        if len(text) > 8_000:
+            raise AssertionError("wrapped an oversized note")
+        return wrap_text_lines(text, *args, **kwargs)
+
+    monkeypatch.setattr("app.exports.pdfs.wrap_text_lines", guard)
+    notes = "A" * 8_001
+    with pytest.raises(DomainError, match="too long"):
+        sibling_contact_pdf(
+            "Kumpe Home / FP-1234",
+            [("08-19-26 @ 4:30 p.m.-5:00 p.m.", "Casey Child", "Phone call", notes)],
+        )
+
+
+def test_sibling_contact_note_over_18_rows_is_rejected_before_rendering(
+    monkeypatch,
+) -> None:
+    def forbid_render(*_args, **_kwargs) -> bytes:
+        raise AssertionError("rendered an oversized note")
+
+    monkeypatch.setattr("app.exports.pdfs._fill_cfs400_page", forbid_render)
+    _width, lines_per_row = _cfs400_notes_capacity()
+    notes = "\n".join(
+        f"ExtraLine{index:03d}" for index in range(18 * lines_per_row + 1)
+    )
+    assert len(notes) <= 8_000
+    with pytest.raises(DomainError, match="too long"):
+        sibling_contact_pdf(
+            "Kumpe Home / FP-1234",
+            [("08-19-26 @ 4:30 p.m.-5:00 p.m.", "Casey Child", "Phone call", notes)],
+        )
 
 
 def test_export_rejects_unknown_form_code(client) -> None:

@@ -25,6 +25,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.core.errors import DomainError
+
 CFS400_TEMPLATE = (
     Path(__file__).resolve().parent
     / "templates"
@@ -32,6 +34,16 @@ CFS400_TEMPLATE = (
     / "sibling_contact_log.pdf"
 )
 CFS400_ROWS_PER_PAGE = 6
+# A note may continue down the log. Past this, expansion builds a page per
+# six rows and can exhaust the export process before anything is rendered.
+CFS400_MAX_NOTE_CHARS = 8_000
+CFS400_MAX_NOTE_ROWS = 18
+_CFS400_FIELD_SIZE = 8
+_CFS400_BOX_PAD_X = 6
+_CFS400_BOX_PAD_Y = 4
+_NOTE_TOO_LONG = (
+    "A sibling contact note is too long to export. Shorten it and try again."
+)
 
 
 def paragraph_text(value: object) -> str:
@@ -356,16 +368,68 @@ def _cfs400_row_rects(page) -> list[list[list[float]]]:
     return [lifted, *field_rows]
 
 
+def _boxed_text_metrics(rect: list[float], size: float) -> tuple[float, int, float]:
+    _x0, y0, x1, _y1 = rect
+    width = x1 - _x0 - _CFS400_BOX_PAD_X
+    height = _y1 - y0 - _CFS400_BOX_PAD_Y
+    leading = size + 1.5
+    return width, max(1, int(height // leading)), leading
+
+
+def _cfs400_notes_capacity() -> tuple[float, int]:
+    page = PdfReader(CFS400_TEMPLATE).pages[0]
+    widths: list[float] = []
+    capacities: list[int] = []
+    for row in _cfs400_row_rects(page):
+        width, max_lines, _leading = _boxed_text_metrics(row[-1], _CFS400_FIELD_SIZE)
+        widths.append(width)
+        capacities.append(max_lines)
+    return min(widths), min(capacities)
+
+
+def _expand_cfs400_note_rows(
+    rows: list[tuple[str, str, str, str]],
+) -> list[tuple[str, str, str, str]]:
+    width, max_lines = _cfs400_notes_capacity()
+    expanded: list[tuple[str, str, str, str]] = []
+    for when, names, contact, notes in rows:
+        if len(notes) > CFS400_MAX_NOTE_CHARS:
+            raise DomainError(_NOTE_TOO_LONG)
+        lines = wrap_text_lines(
+            notes,
+            width,
+            font_name="Helvetica",
+            font_size=_CFS400_FIELD_SIZE,
+        )
+        row_count = max(1, (len(lines) + max_lines - 1) // max_lines)
+        if row_count > CFS400_MAX_NOTE_ROWS:
+            raise DomainError(_NOTE_TOO_LONG)
+        if len(lines) <= max_lines:
+            expanded.append((when, names, contact, notes))
+            continue
+        for index in range(0, len(lines), max_lines):
+            first = index == 0
+            expanded.append(
+                (
+                    when if first else "",
+                    names if first else "",
+                    contact if first else "",
+                    "\n".join(lines[index : index + max_lines]),
+                )
+            )
+    return expanded
+
+
 def _draw_boxed(
-    painter: canvas.Canvas, text: str, rect: list[float], size: float = 8
+    painter: canvas.Canvas,
+    text: str,
+    rect: list[float],
+    size: float = _CFS400_FIELD_SIZE,
 ) -> None:
-    x0, y0, x1, y1 = rect
-    width = x1 - x0 - 6
-    height = y1 - y0 - 4
+    x0, _y0, _x1, y1 = rect
+    width, max_lines, leading = _boxed_text_metrics(rect, size)
     painter.setFont("Helvetica", size)
     lines = wrap_text_lines(text, width, font_name="Helvetica", font_size=size)
-    leading = size + 1.5
-    max_lines = max(1, int(height // leading))
     top = y1 - size - 2
     for index, line in enumerate(lines[:max_lines]):
         painter.drawString(x0 + 3, top - index * leading, line)
@@ -426,9 +490,10 @@ def append_pdfs(base: bytes, extras: list[bytes]) -> bytes:
 
 
 def sibling_contact_pdf(home_line: str, rows: list[tuple[str, str, str, str]]) -> bytes:
+    expanded = _expand_cfs400_note_rows(rows)
     chunks = [
-        rows[index : index + CFS400_ROWS_PER_PAGE]
-        for index in range(0, max(len(rows), 1), CFS400_ROWS_PER_PAGE)
+        expanded[index : index + CFS400_ROWS_PER_PAGE]
+        for index in range(0, max(len(expanded), 1), CFS400_ROWS_PER_PAGE)
     ]
     if not rows:
         chunks = [[]]
